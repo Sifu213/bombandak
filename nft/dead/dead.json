@@ -1,0 +1,15 @@
+{
+  "name": "Bombandak - Dead",
+  "description": "A Dead Bombandak.",
+  "image": "ipfs://bafybeie7656c6pzrgufaszbuc27km4otmpzibuswrt4snor4bchp6vrcx4",
+  "attributes": [
+    {
+      "trait_type": "Status",
+      "value": "Dead"
+    },
+    {
+      "trait_type": "Type",
+      "value": "Smoke"
+    }
+  ]
+}

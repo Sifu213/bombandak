@@ -1,0 +1,15 @@
+{
+  "name": "Bombandak - Alive",
+  "description": "A living Bomb waintinf to explode!",
+  "image": "ipfs://bafybeie4dwnv5zogytqc2poc577r3w5hf2gqt2aspzelvgtj5e6bda5kdy",
+  "attributes": [
+    {
+      "trait_type": "Status",
+      "value": "Alive"
+    },
+    {
+      "trait_type": "Type",
+      "value": "Bomb"
+    }
+  ]
+}
