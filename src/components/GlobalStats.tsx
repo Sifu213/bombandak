@@ -12,7 +12,7 @@ interface NFTStats {
   averageLifetime: number
   longestLiving: {
     tokenId: bigint | null
-    timeLeft: number
+    realLifetime: number
   }
 }
 
@@ -23,9 +23,16 @@ export function GlobalStats() {
     totalDead: 0,
     totalTransfers: 0,
     averageLifetime: 0,
-    longestLiving: { tokenId: null, timeLeft: 0 }
+    longestLiving: { tokenId: null, realLifetime: 0 }
   })
   const [isLoading, setIsLoading] = useState(true)
+
+  // Récupérer le champion directement du contrat
+  const { data: championInfo } = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: CONTRACT_ABI,
+    functionName: 'getChampionInfo',
+  })
 
   // Récupérer le nombre total de NFTs
   const { data: totalSupply, refetch: refetchTotalSupply } = useReadContract({
@@ -40,12 +47,13 @@ export function GlobalStats() {
 
     setIsLoading(true)
     const total = Number(totalSupply)
+    const currentTime = Math.floor(Date.now() / 1000) // Timestamp actuel en secondes
     
     try {
       let aliveCount = 0
       let deadCount = 0
       let totalTransferCount = 0
-      let longestLivingTime = 0
+      let longestRealLifetime = 0
       let longestLivingId: bigint | null = null
       const lifetimes: number[] = []
 
@@ -54,7 +62,7 @@ export function GlobalStats() {
         const tokenId = BigInt(i)
 
         try {
-          // Récupérer les données du NFT
+          // Récupérer les données du NFT (maintenant avec mintTime en premier)
           const nftData = await readContract(config, {
             address: CONTRACT_ADDRESS,
             abi: CONTRACT_ABI,
@@ -64,19 +72,38 @@ export function GlobalStats() {
 
           const [expiryTime, transferCount, ownerHistory, isAlive, isDead, timeLeft] = nftData
 
-          // Compter les NFTs vivants/morts
-          if (isAlive && timeLeft > 0n) {
-            aliveCount++
-            const timeLeftSeconds = Number(timeLeft)
-            lifetimes.push(timeLeftSeconds)
+          // Récupérer le mintTime depuis nftData directement
+          const nftDataStruct = await readContract(config, {
+            address: CONTRACT_ADDRESS,
+            abi: CONTRACT_ABI,
+            functionName: 'nftData',
+            args: [tokenId],
+          }) as [bigint, bigint, bigint, boolean, boolean]
 
-            // Trouver le NFT qui vit le plus longtemps
-            if (timeLeftSeconds > longestLivingTime) {
-              longestLivingTime = timeLeftSeconds
-              longestLivingId = tokenId
-            }
+          const [mintTime] = nftDataStruct
+
+          // Calculer la vraie durée de vie
+          let realLifetime: number
+          if (isAlive && !isDead && timeLeft > 0n) {
+            // NFT vivant : temps depuis le mint
+            realLifetime = currentTime - Number(mintTime)
+            aliveCount++
+            lifetimes.push(Number(timeLeft))
           } else {
+            // NFT mort : utiliser le record du contrat ou calculer
+            if (championInfo && championInfo[0] === tokenId) {
+              realLifetime = Number(championInfo[1]) // lifetime du champion
+            } else {
+              // Approximation : temps entre mint et mort (expiryTime car reset à la mort)
+              realLifetime = Number(expiryTime) - Number(mintTime)
+            }
             deadCount++
+          }
+
+          // Vérifier si c'est le champion de longévité
+          if (realLifetime > longestRealLifetime) {
+            longestRealLifetime = realLifetime
+            longestLivingId = tokenId
           }
 
           // Compter les transferts
@@ -86,6 +113,12 @@ export function GlobalStats() {
           // NFT n'existe pas ou erreur
           deadCount++
         }
+      }
+
+      // Utiliser les infos du champion du contrat si disponible
+      if (championInfo && championInfo[0] > 0) {
+        longestLivingId = championInfo[0]
+        longestRealLifetime = Number(championInfo[1])
       }
 
       // Calculer la durée de vie moyenne
@@ -101,7 +134,7 @@ export function GlobalStats() {
         averageLifetime: Math.round(averageLifetime),
         longestLiving: {
           tokenId: longestLivingId,
-          timeLeft: longestLivingTime
+          realLifetime: longestRealLifetime
         }
       })
 
@@ -117,14 +150,14 @@ export function GlobalStats() {
     if (totalSupply) {
       calculateGlobalStats()
     }
-  }, [totalSupply])
+  }, [totalSupply, championInfo])
 
   // Auto-refresh toutes les 30 secondes
   useEffect(() => {
     const interval = setInterval(() => {
       refetchTotalSupply()
       calculateGlobalStats()
-    }, 30000) // 30 secondes
+    }, 30000)
 
     return () => clearInterval(interval)
   }, [totalSupply])
@@ -146,8 +179,8 @@ export function GlobalStats() {
     <div className="border-white/20">
       <div className="flex justify-between items-center mb-6">
         <h3 className="text-xl lg:text-2xl font-semibold text-white mb-6 text-center xl:text-left">
-                Global Stats
-              </h3>
+          Global Stats
+        </h3>
         <div className="flex items-center gap-2">
           {isLoading && (
             <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
@@ -164,37 +197,35 @@ export function GlobalStats() {
         </div>
         <div className="bg-white/5 rounded-lg p-3 text-center">
           <div className="text-2xl font-bold text-green-400">{stats.totalAlive}</div>
-          <div className="text-sm text-white">Still Alive</div>
+          <div className="text-sm text-white">Alive</div>
         </div>
         <div className="bg-white/5 rounded-lg p-3 text-center">
           <div className="text-2xl font-bold text-red-400">{stats.totalDead}</div>
-          <div className="text-sm text-white">Dead</div>
+          <div className="text-sm text-white">Exploded</div>
         </div>
       </div>
 
       {/* Stats détaillées */}
       <div className="space-y-3 text-sm">
-    
-        
         <div className="flex justify-between items-center">
           <span className="text-white">Total Transfers:</span>
           <span className="text-blue-400 font-semibold">{stats.totalTransfers}</span>
         </div>
         
         <div className="flex justify-between items-center">
-          <span className="text-white">Avg Lifetime:</span>
+          <span className="text-white">Avg Remaining:</span>
           <span className="text-purple-400 font-semibold">{formatTime(stats.averageLifetime)}</span>
         </div>
         
         {stats.longestLiving.tokenId && (
           <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3 mt-4">
             <div className="text-center">
-              <div className="text-green-400 font-semibold mb-1">Longest Living Bombadak</div>
+              <div className="text-green-400 font-semibold mb-1">👑 Longest Living Bombadak</div>
               <div className="text-white font-bold">
                 #{stats.longestLiving.tokenId.toString()}
               </div>
               <div className="text-green-300 text-sm">
-                {formatTime(stats.longestLiving.timeLeft)} remaining
+                Lived: {formatTime(stats.longestLiving.realLifetime)}
               </div>
             </div>
           </div>

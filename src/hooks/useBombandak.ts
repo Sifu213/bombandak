@@ -17,6 +17,12 @@ export function useBombandak() {
     },
   })
 
+  const { data: contractOwner } = useReadContract({
+    address: CONTRACT_ADDRESS,
+    abi: CONTRACT_ABI,
+    functionName: 'owner',
+  })
+
   const { data: totalSupply } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
@@ -36,7 +42,7 @@ export function useBombandak() {
         address: CONTRACT_ADDRESS,
         abi: CONTRACT_ABI,
         functionName: 'mint',
-        value: parseEther('1'), // 5 MON
+        value: parseEther('1'),
       })
     } catch (error) {
       console.error('Mint error:', error)
@@ -44,8 +50,34 @@ export function useBombandak() {
     }
   }
 
+  const endGameAndDistribute = async () => {
+    try {
+      await writeContract({
+        address: CONTRACT_ADDRESS,
+        abi: CONTRACT_ABI,
+        functionName: 'endGameAndDistribute',
+      })
+    } catch (error) {
+      console.error('End game error:', error)
+      throw error
+    }
+  }
+
+  const emergencyWithdraw = async () => {
+    try {
+      await writeContract({
+        address: CONTRACT_ADDRESS,
+        abi: CONTRACT_ABI,
+        functionName: 'emergencyWithdraw',
+      })
+    } catch (error) {
+      console.error('Emergency withdraw error:', error)
+      throw error
+    }
+  }
+
   const transfer = async (to: string, tokenId: bigint) => {
-    // Valider que l'adresse est bien formatée
+
     if (!isAddress(to)) {
       throw new Error('Invalid address format')
     }
@@ -78,12 +110,13 @@ export function useBombandak() {
     hasMinted: hasMinted as boolean,
     totalSupply: totalSupply as bigint,
     expiredNFTs: expiredNFTs as readonly bigint[],
-    
+    isOwner: address && contractOwner && address.toLowerCase() === contractOwner.toLowerCase(), 
     // Actions
     mint,
     transfer,
     getNFTData,
-    
+    endGameAndDistribute,
+    emergencyWithdraw,
     // States
     isLoading: isWritePending,
   }

@@ -3,6 +3,7 @@ import { MintButton } from './components/MintButton'
 import { GlobalStats } from './components/GlobalStats'
 import { ViewMyNFTs } from './components/ViewMyNFTs'
 import { Leaderboard } from './components/Leaderboard'
+import { OwnerPanel } from './components/OwnerPanel'
 
 function App() {
   return (
@@ -33,19 +34,19 @@ function App() {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-sm text-white">
                 <div className="space-y-2">
                   <div className="text-2xl font-semibold">1️⃣ Mint</div>
-                  <p>Mint your Bobamdak NFT with 1 days of life</p>
+                  <p>Mint your Bombandak with 24h countdown before explosion</p>
                 </div>
                 <div className="space-y-2">
                   <div className="text-2xl font-semibold">2️⃣ Transfer</div>
-                  <p>Send it to someone to add +1 days. </p> 
+                  <p>Send it to someone to get +24h delay </p>
                   <p>Never send back to previous owners!</p>
                 </div>
                 <div className="space-y-2">
-                  <div className="text-2xl font-semibold">3️⃣ Survive</div>  
+                  <div className="text-2xl font-semibold">3️⃣ Survive</div>
                   <p>Keep it alive as long as possible!</p>
                 </div>
                 <div className="space-y-2">
-                  <div className="text-2xl font-semibold">4️⃣ Rewards</div>  
+                  <div className="text-2xl font-semibold">4️⃣ Rewards</div>
                   <p>NFT who live the longuest will allow all his owners to get the reward pool!</p>
                 </div>
               </div>
@@ -66,6 +67,7 @@ function App() {
               <div className="space-y-4">
                 <MintButton />
                 <ViewMyNFTs />
+                <OwnerPanel />
               </div>
 
               <img
@@ -79,14 +81,22 @@ function App() {
 
           </div>
 
-
         </div>
       </main>
 
       <footer className="w-full px-4 sm:px-6 lg:px-8 py-6">
         <div className="max-w-7xl mx-auto text-center">
           <p className="text-gray-400 text-sm">
-            Built on <strong className="text-purple-400">Monad Testnet</strong> 🚀
+            <nav>
+              <ul className="flex items-center justify-center gap-4">
+                <li>
+                  Made by <a href="https://x.com/sifu_lam" target="_blank" rel="noopener noreferrer">Sifu_lam</a> for
+                </li>
+                <li>
+                  <img src="/Monad.svg" alt="monad" className="h-16 w-16" />
+                </li>
+              </ul>
+            </nav>
           </p>
         </div>
       </footer>
