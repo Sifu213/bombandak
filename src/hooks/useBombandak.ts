@@ -6,8 +6,11 @@ export function useBombandak() {
   const { address } = useAccount()
   const { writeContract, isPending: isWritePending } = useWriteContract()
 
-  // Fonctions de lecture
-  const { data: hasMinted } = useReadContract({
+  // Fonctions de lecture avec refetch
+  const { 
+    data: hasMinted, 
+    refetch: refetchHasMinted 
+  } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
     functionName: 'hasMinted',
@@ -17,23 +20,47 @@ export function useBombandak() {
     },
   })
 
-  const { data: contractOwner } = useReadContract({
+  const { 
+    data: contractOwner, 
+    refetch: refetchOwner 
+  } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
     functionName: 'owner',
   })
 
-  const { data: totalSupply } = useReadContract({
+  const { 
+    data: totalSupply, 
+    refetch: refetchTotalSupply 
+  } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
     functionName: 'getTotalSupply',
   })
 
-  const { data: expiredNFTs } = useReadContract({
+  const { 
+    data: expiredNFTs, 
+    refetch: refetchExpiredNFTs 
+  } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
     functionName: 'getExpiredNFTs',
   })
+
+  // Fonction pour rafraîchir toutes les données
+  const refetchAll = async () => {
+    await Promise.all([
+      refetchHasMinted(),
+      refetchOwner(),
+      refetchTotalSupply(),
+      refetchExpiredNFTs(),
+    ])
+  }
+
+  // Fonction pour rafraîchir seulement les données utilisateur
+  const refetchUserData = async () => {
+    await refetchHasMinted()
+  }
 
   // Fonctions d'écriture
   const mint = async () => {
@@ -77,7 +104,6 @@ export function useBombandak() {
   }
 
   const transfer = async (to: string, tokenId: bigint) => {
-
     if (!isAddress(to)) {
       throw new Error('Invalid address format')
     }
@@ -94,7 +120,6 @@ export function useBombandak() {
       throw error
     }
   }
-
 
   const getNFTData = (tokenId: bigint) => {
     return useReadContract({
@@ -117,6 +142,14 @@ export function useBombandak() {
     getNFTData,
     endGameAndDistribute,
     emergencyWithdraw,
+    // Refetch functions
+    refetch: refetchUserData, // Pour la compatibilité avec le MintButton
+    refetchAll,
+    refetchUserData,
+    refetchHasMinted,
+    refetchOwner,
+    refetchTotalSupply,
+    refetchExpiredNFTs,
     // States
     isLoading: isWritePending,
   }
