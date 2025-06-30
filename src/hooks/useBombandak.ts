@@ -6,7 +6,7 @@ export function useBombandak() {
   const { address } = useAccount()
   const { writeContract, isPending: isWritePending } = useWriteContract()
 
-  // Fonctions de lecture avec refetch
+
   const { 
     data: hasMinted, 
     refetch: refetchHasMinted 
@@ -47,7 +47,6 @@ export function useBombandak() {
     functionName: 'getExpiredNFTs',
   })
 
-  // Fonction pour rafraîchir toutes les données
   const refetchAll = async () => {
     await Promise.all([
       refetchHasMinted(),
@@ -57,7 +56,6 @@ export function useBombandak() {
     ])
   }
 
-  // Fonction pour rafraîchir seulement les données utilisateur
   const refetchUserData = async () => {
     await refetchHasMinted()
   }
@@ -103,6 +101,24 @@ export function useBombandak() {
     }
   }
 
+  const addToRewardPool = async (amount: string) => {
+    if (!amount || parseFloat(amount) <= 0) {
+      throw new Error('Amount must be greater than 0')
+    }
+
+    try {
+      await writeContract({
+        address: CONTRACT_ADDRESS,
+        abi: CONTRACT_ABI,
+        functionName: 'addToRewardPool',
+        value: parseEther(amount),
+      })
+    } catch (error) {
+      console.error('Add to reward pool error:', error)
+      throw error
+    }
+  }
+
   const transfer = async (to: string, tokenId: bigint) => {
     if (!isAddress(to)) {
       throw new Error('Invalid address format')
@@ -113,7 +129,7 @@ export function useBombandak() {
         address: CONTRACT_ADDRESS,
         abi: CONTRACT_ABI,
         functionName: 'transfer',
-        args: [to as `0x${string}`, tokenId], // Cast explicite
+        args: [to as `0x${string}`, tokenId], 
       })
     } catch (error) {
       console.error('Transfer error:', error)
@@ -142,8 +158,9 @@ export function useBombandak() {
     getNFTData,
     endGameAndDistribute,
     emergencyWithdraw,
+    addToRewardPool, 
     // Refetch functions
-    refetch: refetchUserData, // Pour la compatibilité avec le MintButton
+    refetch: refetchUserData, 
     refetchAll,
     refetchUserData,
     refetchHasMinted,

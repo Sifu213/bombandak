@@ -240,7 +240,7 @@ export function Leaderboard() {
                       ? 'bg-orange-500 text-black'
                       : 'bg-white/20 text-white'
                   }`}>
-                    {index === 0 ? '👑' : index + 1}
+                    {index === 0 ? '1' : index + 1}
                   </div>
 
                   <div>

@@ -9,7 +9,7 @@ function App() {
   return (
     <div className="min-h-screen flex flex-col">
 
-      <header className="w-full px-4 sm:px-6 lg:px-8 py-6">
+      <header className="w-full px-4 sm:px-6 lg:px-8 py-4">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white flex items-center gap-3">
             <img
@@ -28,7 +28,7 @@ function App() {
 
 
 
-          <div className="mt-2 lg:mt-2 bg-white/10 backdrop-blur-sm rounded-xl p-6 mb-4 lg:p-3 border border-white/20">
+          <div className="mt-0 lg:mt-2 bg-white/10 backdrop-blur-sm rounded-xl p-6 mb-4 lg:p-3 border border-white/20">
             <h4 className="text-xl font-semibold text-white mb-4">How to Play</h4>
             <div className="text-center">
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-sm text-white">
@@ -38,7 +38,7 @@ function App() {
                 </div>
                 <div className="space-y-2">
                   <div className="text-2xl font-semibold">2️⃣ Transfer</div>
-                  <p>Send it to someone to get +24h delay </p>
+                  <p>Send it to someone to reinit the 24h countdown</p>
                   <p>Never send back to previous owners!</p>
                 </div>
                 <div className="space-y-2">
@@ -84,7 +84,7 @@ function App() {
         </div>
       </main>
 
-      <footer className="w-full px-4 sm:px-6 lg:px-8 py-6">
+      <footer className="w-full px-4 sm:px-6 lg:px-8 py-0">
         <div className="max-w-7xl mx-auto text-center">
           <p className="text-gray-400 text-sm">
             <nav>
@@ -93,7 +93,7 @@ function App() {
                   Made by <a href="https://x.com/sifu_lam" target="_blank" rel="noopener noreferrer">Sifu_lam</a> for
                 </li>
                 <li>
-                  <img src="/Monad.svg" alt="monad" className="h-16 w-16" />
+                  <img src="/logomonad.png" alt="monad" className="h-3 w-auto" />
                 </li>
               </ul>
             </nav>
