@@ -1,4 +1,4 @@
-export const CONTRACT_ADDRESS = "0x74a17f6377c926722fe7a51ad048f97d32512608" 
+export const CONTRACT_ADDRESS = "0x5643fd77a612d401e91f11857c61681c3cfe6c73" 
 
 export const CONTRACT_ABI = [
 	{

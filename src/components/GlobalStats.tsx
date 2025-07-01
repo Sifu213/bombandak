@@ -246,12 +246,12 @@ export function GlobalStats() {
       {/* Stats principales */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-white/5 rounded-lg p-3 text-center">
-          <div className="text-2xl font-bold text-yellow-400">{stats.totalMinted}</div>
+          <div className="text-2xl font-bold text-yellow-400">{stats.totalMinted}/100</div>
           <div className="text-sm text-white">Total Minted</div>
         </div>
         <div className="bg-white/5 rounded-lg p-3 text-center">
           <div className="text-2xl font-bold text-green-400">{stats.totalAlive}</div>
-          <div className="text-sm text-white">Alive</div>
+          <div className="text-sm text-white">Ticking</div>
         </div>
         <div className="bg-white/5 rounded-lg p-3 text-center">
           <div className="text-2xl font-bold text-red-400">{stats.totalDead}</div>
@@ -274,12 +274,12 @@ export function GlobalStats() {
         {stats.longestLiving.tokenId && (
           <div className="bg-green-500/10 border border-green-500/30 rounded-lg p-3 mt-4">
             <div className="text-center">
-              <div className="text-green-400 font-semibold mb-1">Longest Living Bombadak</div>
+              <div className="text-green-400 font-semibold mb-1">Longest Ticking Bombadak</div>
               <div className="text-white font-bold">
                 #{stats.longestLiving.tokenId.toString()}
               </div>
               <div className="text-green-300 text-sm">
-                Lived: {formatTime(stats.longestLiving.realLifetime)}
+                Ticked: {formatTime(stats.longestLiving.realLifetime)}
               </div>
             </div>
           </div>

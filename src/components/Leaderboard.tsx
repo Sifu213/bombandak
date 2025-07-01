@@ -121,19 +121,19 @@ export function Leaderboard() {
       case 'transfers':
         return filtered
           .sort((a, b) => b.transferCount - a.transferCount)
-          .slice(0, 10)
+          .slice(0, 5)
 
       case 'longevity':
         
         return filtered
           .sort((a, b) => b.realLifetime - a.realLifetime)
-          .slice(0, 10)
+          .slice(0, 5)
 
       case 'deaths':
         return filtered
           .filter(nft => nft.isDead || !nft.isAlive || nft.timeLeft <= 0)
           .sort((a, b) => b.realLifetime - a.realLifetime) 
-          .slice(0, 10)
+          .slice(0, 5)
 
       default:
         return []
@@ -170,7 +170,7 @@ export function Leaderboard() {
       <div className="flex rounded-lg bg-white/5 p-1 mb-6">
         <button
           onClick={() => setActiveTab('transfers')}
-          className={`flex-1 py-2 px-3 rounded-md text-sm font-semibold transition-all ${
+          className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold transition-all ${
             activeTab === 'transfers'
               ? 'border border-white text-white'
               : 'text-gray-300 hover:text-white'
@@ -180,17 +180,17 @@ export function Leaderboard() {
         </button>
         <button
           onClick={() => setActiveTab('longevity')}
-          className={`flex-1 py-2 px-3 rounded-md text-sm font-semibold transition-all ${
+          className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold transition-all ${
             activeTab === 'longevity'
               ? 'border border-white text-white'
               : 'text-gray-300 hover:text-white'
           }`}
         >
-          Longest Lived
+          Longest Ticked
         </button>
         <button
           onClick={() => setActiveTab('deaths')}
-          className={`flex-1 py-2 px-3 rounded-md text-sm font-semibold transition-all ${
+          className={`flex-1 py-2 px-3 rounded-md text-xs font-semibold transition-all ${
             activeTab === 'deaths'
               ? 'border border-white text-white'
               : 'text-gray-300 hover:text-white'
@@ -217,7 +217,7 @@ export function Leaderboard() {
             filteredData.map((nft, index) => (
               <div
                 key={nft.tokenId.toString()}
-                className={`flex items-center justify-between p-4 rounded-lg border transition-all hover:scale-105 ${
+                className={`flex items-center justify-between p-4 rounded-lg border  ${
                   index === 0
                     ? 'bg-yellow-500/20 border-yellow-500/50 shadow-lg'
                     : index === 1
@@ -229,7 +229,7 @@ export function Leaderboard() {
               >
                 
                 <div className="flex items-center gap-4">
-                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
+                  <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs ${
                     index === 0
                       ? 'bg-yellow-500 text-black'
                       : index === 1
@@ -245,8 +245,8 @@ export function Leaderboard() {
                     <div className="font-semibold text-white">
                       Bombadak #{nft.tokenId.toString()}
                     </div>
-                    <div className="text-sm text-gray-400">
-                      Owner: {nft.currentOwner ? shortenAddress(nft.currentOwner) : 'Exploded'}
+                    <div className="text-xs text-gray-400">
+                      {nft.currentOwner ? shortenAddress(nft.currentOwner) : 'Exploded'}
                     </div>
                   </div>
                 </div>
@@ -255,30 +255,30 @@ export function Leaderboard() {
                 <div className="text-right">
                   {activeTab === 'transfers' && (
                     <>
-                      <div className="text-lg font-bold text-blue-400">
+                      <div className="text-sm font-bold text-blue-400">
                         {nft.transferCount}
                       </div>
-                      <div className="text-sm text-gray-400">transfers</div>
+                      <div className="text-xs text-gray-400">transfers</div>
                     </>
                   )}
 
                   {activeTab === 'longevity' && (
                     <>
-                      <div className="text-lg font-bold text-green-400">
+                      <div className="text-sm font-bold text-green-400">
                         {formatTime(nft.realLifetime)}
                       </div>
-                      <div className="text-sm text-gray-400">
-                        {nft.isAlive && nft.timeLeft > 0 ? 'lived so far' : 'total lived'}
+                      <div className="text-xs text-gray-400">
+                        {nft.isAlive && nft.timeLeft > 0 ? 'ticked so far' : 'total ticked'}
                       </div>
                     </>
                   )}
 
                   {activeTab === 'deaths' && (
                     <>
-                      <div className="text-lg font-bold text-red-400">
+                      <div className="text-sm font-bold text-red-400">
                         {formatTime(nft.realLifetime)}
                       </div>
-                      <div className="text-sm text-gray-400">lived before death</div>
+                      <div className="text-xs text-gray-400">Total Ticked</div>
                     </>
                   )}
                 </div>

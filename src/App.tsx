@@ -34,20 +34,20 @@ function App() {
               <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-sm text-white">
                 <div className="space-y-2">
                   <div className="text-2xl font-semibold">1️⃣ Mint</div>
-                  <p>Mint your Bombandak with 24h countdown before explosion</p>
+                  <p>Mint your Bombandak with 24h Ticking countdown before explosion</p>
                 </div>
                 <div className="space-y-2">
                   <div className="text-2xl font-semibold">2️⃣ Transfer</div>
-                  <p>Send it to someone to reinit the 24h countdown</p>
+                  <p>Send it to reinit the 24h countdown</p>
                   <p>Never send back to previous owners!</p>
                 </div>
                 <div className="space-y-2">
                   <div className="text-2xl font-semibold">3️⃣ Survive</div>
-                  <p>Keep it alive as long as possible!</p>
+                  <p>Keep it ticking as long as possible!</p>
                 </div>
                 <div className="space-y-2">
                   <div className="text-2xl font-semibold">4️⃣ Rewards</div>
-                  <p>NFT who live the longuest will allow all his owners to get the reward pool!</p>
+                  <p>NFT who ticked the longuest will allow all his owners to get the reward pool!</p>
                 </div>
               </div>
             </div>
