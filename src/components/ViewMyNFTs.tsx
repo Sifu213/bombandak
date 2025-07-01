@@ -204,7 +204,6 @@ export function ViewMyNFTs() {
         View & Manage my NFTs
       </button>
 
-      {/* Modal rendue dans le body via portal */}
       {isOpen && createPortal(<Modal />, document.body)}
     </>
   )

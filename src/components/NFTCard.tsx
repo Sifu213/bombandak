@@ -33,16 +33,13 @@ export function NFTCard({ tokenId }: NFTCardProps) {
     
     setIsImageLoading(true)
     try {
-      // Convertir l'URI IPFS en URL accessible
       const metadataUrl = tokenURI.startsWith('ipfs://') 
         ? tokenURI.replace('ipfs://', 'https://ipfs.io/ipfs/')
         : tokenURI
       
-      // Récupérer le JSON de métadonnées
       const response = await fetch(metadataUrl)
       const metadata = await response.json()
       
-      // Extraire l'URL de l'image
       if (metadata.image) {
         const imageUrl = metadata.image.startsWith('ipfs://') 
           ? metadata.image.replace('ipfs://', 'https://ipfs.io/ipfs/')
@@ -79,10 +76,9 @@ export function NFTCard({ tokenId }: NFTCardProps) {
 
   const [expiryTime, transferCount, ownerHistory, isAlive, isDead, timeLeft] = nftData
 
-  // Convertir le temps restant en format lisible
   const formatTimeLeft = (seconds: bigint) => {
     const totalSeconds = Number(seconds)
-    if (totalSeconds <= 0) return 'EXPIRED'
+    if (totalSeconds <= 0) return 'EXPLODED'
 
     const days = Math.floor(totalSeconds / (24 * 60 * 60))
     const hours = Math.floor((totalSeconds % (24 * 60 * 60)) / (60 * 60))
@@ -103,18 +99,18 @@ export function NFTCard({ tokenId }: NFTCardProps) {
   return (
     <>
       <div className={`rounded-xl p-4 border-2 ${getStatusColor()}`}>
-        {/* NFT Header */}
+        
         <div className="flex justify-between items-start mb-3">
           <h3 className="text-lg font-bold text-white">
             Bombandak #{tokenId.toString()}
           </h3>
           <span className={`px-2 py-1 rounded text-xs font-semibold ${isAlive && timeLeft > 0n ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
             }`}>
-            {isAlive && timeLeft > 0n ? 'ALIVE' : 'DEAD'}
+            {isAlive && timeLeft > 0n ? 'ALIVE' : 'EXPLODED'}
           </span>
         </div>
 
-        {/* Image du NFT */}
+       
         {tokenURI && (
           <div className="mb-3">
             <img
@@ -122,14 +118,13 @@ export function NFTCard({ tokenId }: NFTCardProps) {
               alt={`Bombadak #${tokenId}`}
               className="w-full h-full object-cover rounded-lg"
               onError={(e) => {
-                // Si l'image ne charge pas, afficher un placeholder
+               
                 e.currentTarget.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzMzMzMzMyIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmaWxsPSIjNjY2NjY2IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSIgZm9udC1mYW1pbHk9IkFyaWFsLCBzYW5zLXNlcmlmIiBmb250LXNpemU9IjE4Ij5JbWFnZSBub3QgZm91bmQ8L3RleHQ+PC9zdmc+'
               }}
             />
           </div>
         )}
 
-        {/* Time Left */}
         <div className="mb-3">
           <div className="text-sm text-gray-400 mb-1">Time Left:</div>
           <div className={`text-xl font-bold ${Number(timeLeft) < 24 * 60 * 60 ? 'text-red-400' : 'text-green-400'
@@ -138,7 +133,7 @@ export function NFTCard({ tokenId }: NFTCardProps) {
           </div>
         </div>
 
-        {/* Stats */}
+      
         <div className="grid grid-cols-2 gap-3 mb-4 text-sm">
           <div>
             <div className="text-gray-400">Transfers:</div>
@@ -150,7 +145,7 @@ export function NFTCard({ tokenId }: NFTCardProps) {
           </div>
         </div>
 
-        {/* Actions */}
+      
         {isAlive && timeLeft > 0n && (
           <button
             onClick={() => setShowTransfer(true)}
@@ -163,12 +158,12 @@ export function NFTCard({ tokenId }: NFTCardProps) {
 
         {(!isAlive || timeLeft === 0n) && (
           <div className="w-full py-2 bg-red-500/20 text-red-400 text-center rounded-lg font-semibold">
-            NFT is Dead
+            NFT exploded
           </div>
         )}
       </div>
 
-      {/* Transfer Modal */}
+   
       {showTransfer && (
         <TransferModal
           tokenId={tokenId}

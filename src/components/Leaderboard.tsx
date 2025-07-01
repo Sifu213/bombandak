@@ -63,18 +63,16 @@ export function Leaderboard() {
 
           const [mintTime] = nftDataStruct
 
-          // Calculer la vraie durée de vie
           let realLifetime: number
           if (isAlive && !isDead && timeLeft > 0n) {
-            // NFT vivant : temps depuis le mint
+          
             realLifetime = currentTime - Number(mintTime)
           } else {
-            // NFT mort : temps entre mint et mort
-            // On utilise l'expiryTime comme approximation de la mort
+            
             realLifetime = Number(expiryTime) - Number(mintTime)
           }
 
-          // Récupérer le propriétaire actuel
+        
           let currentOwner = ''
           try {
             currentOwner = await readContract(config, {
@@ -84,14 +82,14 @@ export function Leaderboard() {
               args: [tokenId],
             }) as string
           } catch {
-            // NFT brûlé ou erreur
+            
           }
 
           nfts.push({
             tokenId,
             transferCount: Number(transferCount),
             timeLeft: Number(timeLeft),
-            realLifetime, // ← Nouvelle propriété
+            realLifetime, 
             isAlive,
             isDead,
             ownerHistory,
@@ -99,7 +97,7 @@ export function Leaderboard() {
           })
 
         } catch (error) {
-          // NFT n'existe pas, on skip
+          
         }
       }
 
@@ -115,7 +113,7 @@ export function Leaderboard() {
     fetchLeaderboardData()
   }, [totalSupply])
 
-  // Filtrer et trier selon l'onglet actif
+
   const getFilteredData = () => {
     let filtered = [...leaderboard]
 
@@ -126,7 +124,7 @@ export function Leaderboard() {
           .slice(0, 10)
 
       case 'longevity':
-        // ← Changement ici : trier par vraie longévité au lieu de temps restant
+        
         return filtered
           .sort((a, b) => b.realLifetime - a.realLifetime)
           .slice(0, 10)
@@ -134,7 +132,7 @@ export function Leaderboard() {
       case 'deaths':
         return filtered
           .filter(nft => nft.isDead || !nft.isAlive || nft.timeLeft <= 0)
-          .sort((a, b) => b.realLifetime - a.realLifetime) // ← Trier par longévité aussi
+          .sort((a, b) => b.realLifetime - a.realLifetime) 
           .slice(0, 10)
 
       default:
@@ -142,7 +140,7 @@ export function Leaderboard() {
     }
   }
 
-  // Formater le temps
+  
   const formatTime = (seconds: number) => {
     if (seconds <= 0) return 'Expired'
 
@@ -155,7 +153,7 @@ export function Leaderboard() {
     return `${minutes}m`
   }
 
-  // Raccourcir les adresses
+  
   const shortenAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`
   }
@@ -168,7 +166,7 @@ export function Leaderboard() {
         Leaderboard
       </h3>
 
-      {/* Tabs */}
+   
       <div className="flex rounded-lg bg-white/5 p-1 mb-6">
         <button
           onClick={() => setActiveTab('transfers')}
@@ -202,14 +200,14 @@ export function Leaderboard() {
         </button>
       </div>
 
-      {/* Loading */}
+
       {isLoading ? (
         <div className="text-center py-8">
           <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <p className="text-gray-400">Loading leaderboard...</p>
         </div>
       ) : (
-        /* Leaderboard List */
+      
         <div className="space-y-3">
           {filteredData.length === 0 ? (
             <div className="text-center py-8">
@@ -229,7 +227,7 @@ export function Leaderboard() {
                     : 'bg-white/5 border-white/20'
                 }`}
               >
-                {/* Rank & NFT Info */}
+                
                 <div className="flex items-center gap-4">
                   <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
                     index === 0
@@ -253,7 +251,7 @@ export function Leaderboard() {
                   </div>
                 </div>
 
-                {/* Stats */}
+                
                 <div className="text-right">
                   {activeTab === 'transfers' && (
                     <>
@@ -285,13 +283,13 @@ export function Leaderboard() {
                   )}
                 </div>
 
-                {/* Status Badge */}
+                
                 <div className={`px-2 py-1 rounded text-xs font-semibold ml-4 ${
                   nft.isAlive && !nft.isDead && nft.timeLeft > 0
                     ? 'bg-green-500/20 text-green-400 border border-green-500/50'
                     : 'bg-red-500/20 text-red-400 border border-red-500/50'
                 }`}>
-                  {nft.isAlive && !nft.isDead && nft.timeLeft > 0 ? 'ALIVE' : 'DEAD'}
+                  {nft.isAlive && !nft.isDead && nft.timeLeft > 0 ? 'ALIVE' : 'EXPLODED'}
                 </div>
               </div>
             ))
@@ -299,7 +297,7 @@ export function Leaderboard() {
         </div>
       )}
 
-      {/* Refresh Button */}
+    
       <button
         onClick={fetchLeaderboardData}
         disabled={isLoading}
