@@ -11,7 +11,8 @@ export function NFTCard({ tokenId }: NFTCardProps) {
   const [showTransfer, setShowTransfer] = useState(false)
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [isImageLoading, setIsImageLoading] = useState(true)
-  const [imageError, setImageError] = useState(false)
+  const [useLocalFallback, setUseLocalFallback] = useState(false)
+  const [loadingTimeout, setLoadingTimeout] = useState<NodeJS.Timeout | null>(null)
 
   const { data: nftData } = useReadContract({
     address: CONTRACT_ADDRESS,
@@ -27,39 +28,77 @@ export function NFTCard({ tokenId }: NFTCardProps) {
     args: [tokenId],
   })
 
+  // Déterminer quelle image locale utiliser selon l'état du NFT
+  const getLocalImagePath = () => {
+    if (!nftData) return '/bombandak.png'
+    
+    const [, , , isAlive, isDead, timeLeft] = nftData
+    
+    if (isDead || !isAlive || Number(timeLeft) <= 0) {
+      return '/bombandakexploded.png'
+    } else {
+      return '/bombandak.png'
+    }
+  }
+
   useEffect(() => {
-    const fetchImageFromMetadata = async () => {
+    const fetchImageFromIPFS = async () => {
       if (!tokenURI) return
       
       setIsImageLoading(true)
-      setImageError(false)
+      setUseLocalFallback(false)
+      
+      // Timeout pour basculer sur les images locales après 10 secondes
+      const timeout = setTimeout(() => {
+        console.log('IPFS timeout, switching to local images')
+        setUseLocalFallback(true)
+        setIsImageLoading(false)
+      }, 5000) // 10 secondes
+      
+      setLoadingTimeout(timeout)
       
       try {
         const metadataUrl = tokenURI.startsWith('ipfs://') 
           ? tokenURI.replace('ipfs://', 'https://ipfs.io/ipfs/')
           : tokenURI
         
+        console.log('Fetching metadata from:', metadataUrl)
         const response = await fetch(metadataUrl)
+        
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}`)
+        }
+        
         const metadata = await response.json()
         
         if (metadata.image) {
           const imageUrl = metadata.image.startsWith('ipfs://') 
             ? metadata.image.replace('ipfs://', 'https://ipfs.io/ipfs/')
             : metadata.image
+          
+          console.log('IPFS image found:', imageUrl)
           setImageUrl(imageUrl)
+          clearTimeout(timeout)
+          setIsImageLoading(false)
         } else {
-          setImageError(true)
+          throw new Error('No image in metadata')
         }
       } catch (error) {
-        console.error('Error fetching NFT metadata:', error)
-        setImageUrl(null)
-        setImageError(true)
-      } finally {
+        console.error('Error fetching NFT metadata from IPFS:', error)
+        clearTimeout(timeout)
+        setUseLocalFallback(true)
         setIsImageLoading(false)
       }
     }
 
-    fetchImageFromMetadata()
+    fetchImageFromIPFS()
+
+    // Cleanup timeout on unmount
+    return () => {
+      if (loadingTimeout) {
+        clearTimeout(loadingTimeout)
+      }
+    }
   }, [tokenURI])
 
   if (!nftData) {
@@ -94,15 +133,13 @@ export function NFTCard({ tokenId }: NFTCardProps) {
     return 'border-green-500 bg-green-500/10' // Safe
   }
 
-  const handleImageLoad = () => {
+  const handleIPFSImageError = () => {
+    console.log('IPFS image failed to load, switching to local fallback')
+    setUseLocalFallback(true)
     setIsImageLoading(false)
-    setImageError(false)
   }
 
-  const handleImageError = () => {
-    setIsImageLoading(false)
-    setImageError(true)
-  }
+  
 
   return (
     <>
@@ -115,44 +152,42 @@ export function NFTCard({ tokenId }: NFTCardProps) {
           <span className={`px-2 py-1 rounded text-xs font-semibold ${
             isAlive && timeLeft > 0n ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
           }`}>
-            {isAlive ? 'TICKING' : 'EXPLODED'}
+            {isAlive && timeLeft > 0n ? 'TICKING' : 'EXPLODED'}
           </span>
         </div>
 
-        {/* Section Image avec gestion du loading */}
-        {tokenURI && (
-          <div className="mb-3 relative">
-            {/* Skeleton loader pendant le chargement */}
-            {isImageLoading && (
-              <div className="w-full h-48 bg-gray-600 rounded-lg animate-pulse flex items-center justify-center">
-                <div className="text-gray-400 text-sm">Loading image...</div>
-              </div>
-            )}
-            
-            {/* Image réelle */}
-            {imageUrl && !imageError && (
+       
+        <div className="mb-3 relative">
+          
+          
+          {/* Image IPFS (priorité) */}
+          {!isImageLoading && !useLocalFallback && imageUrl && (
+            <div className="relative">
               <img
                 src={imageUrl}
                 alt={`Bombandak #${tokenId}`}
-                className={`w-full h-auto object-cover rounded-lg transition-opacity duration-300 ${
-                  isImageLoading ? 'opacity-0 absolute inset-0' : 'opacity-100'
-                }`}
-                onLoad={handleImageLoad}
-                onError={handleImageError}
+                className="w-full h-auto object-cover rounded-lg"
+                onError={handleIPFSImageError}
               />
-            )}
-            
-            {/* Fallback en cas d'erreur */}
-            {(imageError || (!imageUrl && !isImageLoading)) && (
-              <div className="w-full h-auto bg-gray-700 rounded-lg flex items-center justify-center">
-                <div className="text-center text-gray-400">
-                  <div className="text-4xl mb-2">💣</div>
-                  <div className="text-sm">Image not available</div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+              
+            </div>
+          )}
+          
+          {/* Image locale (fallback) */}
+          {!isImageLoading && useLocalFallback && (
+            <div className="relative">
+              <img
+                src={getLocalImagePath()}
+                alt={`Bombandak #${tokenId} - ${isAlive && timeLeft > 0n ? 'Ticking' : 'Exploded'}`}
+                className="w-full h-auto object-cover rounded-lg"
+                
+              />
+              
+            </div>
+          )}
+          
+       
+        </div>
 
         <div className="mb-3">
           <div className="text-sm text-gray-400 mb-1">Time Left:</div>
@@ -174,7 +209,7 @@ export function NFTCard({ tokenId }: NFTCardProps) {
           </div>
         </div>
 
-        {isAlive && (
+        {isAlive && timeLeft > 0n && (
           <button
             onClick={() => setShowTransfer(true)}
             className="w-full py-2 rounded-xl font-semibold text-lg bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white transform hover:scale-105 transition-all duration-200 shadow-lg"
@@ -183,7 +218,7 @@ export function NFTCard({ tokenId }: NFTCardProps) {
           </button>
         )}
 
-        {!isAlive && (
+        {(!isAlive || timeLeft <= 0n) && (
           <div className="w-full py-2 bg-red-500/20 text-red-400 text-center rounded-lg font-semibold">
             NFT exploded
           </div>
