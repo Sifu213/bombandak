@@ -8,16 +8,18 @@ interface NFTLeaderboardEntry {
   tokenId: bigint
   transferCount: number
   timeLeft: number
+  realLifetime: number
   isAlive: boolean
   isDead: boolean
   ownerHistory: string[]
+  currentOwner?: string
 }
 
 type LeaderboardType = 'transfers' | 'longevity' | 'deaths'
 
 // Cache global pour les données du leaderboard
 const leaderboardCache = new Map<string, any>()
-const CACHE_DURATION = 300000 // 5 minutes pour le leaderboard
+const CACHE_DURATION = 120000 // 2 minutes en millisecondes
 
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
@@ -29,14 +31,14 @@ export function Leaderboard() {
   const [isLoading, setIsLoading] = useState(true)
   const [lastRefresh, setLastRefresh] = useState(0)
 
- 
+  // Récupérer le nombre total de NFTs
   const { data: totalSupply } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
     functionName: 'getTotalSupply',
   })
 
-
+  // Fonction pour traiter les NFTs séquentiellement
   const processNFTsSequentially = async (startId: number, endId: number) => {
     const results = []
     
@@ -52,10 +54,10 @@ export function Leaderboard() {
       }
 
       try {
-        // Délai entre chaque appel
-        await sleep(50) // 200ms entre chaque NFT
+        // Délai entre chaque appel pour éviter 429
+        await sleep(100) // 600ms entre chaque NFT
         
-        // UN SEUL appel RPC par NFT
+        // Récupérer les données du NFT
         const nftData = await readContract(config, {
           address: CONTRACT_ADDRESS,
           abi: CONTRACT_ABI,
@@ -64,15 +66,44 @@ export function Leaderboard() {
         }) as [bigint, bigint, string[], boolean, boolean, bigint]
 
         const [, transferCount, ownerHistory, isAlive, isDead, timeLeft] = nftData
+        
+
+        // Estimation de la vraie durée de vie (sans appel mintTime supplémentaire)
+        let realLifetime: number
+        if (isAlive && !isDead && timeLeft > 0n) {
+          // Pour les NFTs vivants : estimation basée sur les transferts + temps restant
+          realLifetime = (Number(transferCount) * 86400) + (86400 - Number(timeLeft))
+        } else {
+          // Pour les NFTs morts : estimation basée sur les transferts
+          realLifetime = (Number(transferCount) + 1) * 86400 // +1 pour la durée initiale
+        }
+
+        // Récupérer le propriétaire actuel seulement si le NFT est vivant
+        let currentOwner = ''
+        if (isAlive && !isDead && timeLeft > 0n) {
+          try {
+            await sleep(100) // Délai supplémentaire
+            currentOwner = await readContract(config, {
+              address: CONTRACT_ADDRESS,
+              abi: CONTRACT_ABI,
+              functionName: 'ownerOf',
+              args: [tokenId],
+            }) as string
+          } catch {
+            // En cas d'erreur, utiliser le dernier propriétaire de l'historique
+            currentOwner = ownerHistory[ownerHistory.length - 1] || ''
+          }
+        }
 
         const result = {
           tokenId,
           transferCount: Number(transferCount),
           timeLeft: Number(timeLeft),
+          realLifetime,
           isAlive,
           isDead,
           ownerHistory,
-          
+          currentOwner
         }
 
         // Mettre en cache
@@ -85,19 +116,21 @@ export function Leaderboard() {
 
       } catch (error) {
         console.error(`Error fetching NFT #${tokenId}:`, error)
-        await sleep(100) 
+        // En cas d'erreur, attendre plus longtemps
+        await sleep(1000)
       }
     }
 
     return results
   }
 
+  // Fonction pour récupérer toutes les données des NFTs
   const fetchLeaderboardData = useCallback(async () => {
     if (!totalSupply) return
 
     const now = Date.now()
     // Éviter les refresh trop fréquents
-    if (now - lastRefresh < 120000) { // Minimum 2 minutes
+    if (now - lastRefresh < 60000) { // Minimum 1 minute
       return
     }
 
@@ -107,8 +140,8 @@ export function Leaderboard() {
     try {
       console.log(`Fetching leaderboard data for ${total} NFTs...`)
       
-    
-      const BATCH_SIZE = 10 
+      // Traiter par petits batches de 3 NFTs
+      const BATCH_SIZE = 10
       const batches = Math.ceil(total / BATCH_SIZE)
       const allNFTs: NFTLeaderboardEntry[] = []
 
@@ -122,15 +155,15 @@ export function Leaderboard() {
           const batchResults = await processNFTsSequentially(startId, endId)
           allNFTs.push(...batchResults)
 
-          // Délai entre batches réduit
+          // Délai plus long entre les batches
           if (batchIndex < batches - 1) {
-            
-            await sleep(50) 
+            console.log(`Waiting 3s before next batch...`)
+            await sleep(600) // 3 secondes entre batches
           }
 
         } catch (error) {
           console.error(`Error processing batch ${batchIndex}:`, error)
-          await sleep(100) 
+          await sleep(1000) // Attendre 5s en cas d'erreur
         }
       }
 
@@ -151,7 +184,12 @@ export function Leaderboard() {
     }
   }, [totalSupply, fetchLeaderboardData])
 
-
+  // Fonction de refresh manuel qui vide le cache
+  const handleManualRefresh = async () => {
+    leaderboardCache.clear()
+    setLastRefresh(0)
+    await fetchLeaderboardData()
+  }
 
   const getFilteredData = () => {
     let filtered = [...leaderboard]
@@ -160,19 +198,17 @@ export function Leaderboard() {
       case 'transfers':
         return filtered
           .sort((a, b) => b.transferCount - a.transferCount)
-          .slice(0, 5) 
+          .slice(0, 5)
 
       case 'longevity':
-        
         return filtered
-          .filter(nft => nft.isAlive && !nft.isDead && nft.timeLeft > 0)
-          .sort((a, b) => b.transferCount - a.transferCount)
+          .sort((a, b) => b.realLifetime - a.realLifetime)
           .slice(0, 5)
 
       case 'deaths':
         return filtered
           .filter(nft => nft.isDead || !nft.isAlive || nft.timeLeft <= 0)
-          .sort((a, b) => b.transferCount - a.transferCount) 
+          .sort((a, b) => b.realLifetime - a.realLifetime)
           .slice(0, 5)
 
       default:
@@ -180,28 +216,20 @@ export function Leaderboard() {
     }
   }
 
-  const formatTransfers = (transfers: number) => {
-    return `${transfers} transfer${transfers !== 1 ? 's' : ''}`
-  }
-
-  const formatTimeLeft = (seconds: number) => {
+  const formatTime = (seconds: number) => {
     if (seconds <= 0) return 'Expired'
 
     const days = Math.floor(seconds / (24 * 60 * 60))
     const hours = Math.floor((seconds % (24 * 60 * 60)) / (60 * 60))
     const minutes = Math.floor((seconds % (60 * 60)) / 60)
 
-    if (days > 0) return `${days}d ${hours}h left`
-    if (hours > 0) return `${hours}h ${minutes}m left`
-    return `${minutes}m left`
+    if (days > 0) return `${days}d ${hours}h`
+    if (hours > 0) return `${hours}h ${minutes}m`
+    return `${minutes}m`
   }
 
   const shortenAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`
-  }
-
-  const getLastOwner = (ownerHistory: string[]) => {
-    return ownerHistory[ownerHistory.length - 1] || 'Unknown'
   }
 
   const filteredData = getFilteredData()
@@ -230,7 +258,7 @@ export function Leaderboard() {
               : 'text-gray-300 hover:text-white'
           }`}
         >
-          Most Active
+          Most Transfers
         </button>
         <button
           onClick={() => setActiveTab('longevity')}
@@ -240,7 +268,7 @@ export function Leaderboard() {
               : 'text-gray-300 hover:text-white'
           }`}
         >
-          Still Ticking
+          Longest Ticked
         </button>
         <button
           onClick={() => setActiveTab('deaths')}
@@ -291,7 +319,7 @@ export function Leaderboard() {
                       ? 'bg-orange-500 text-black'
                       : 'bg-white/20 text-white'
                   }`}>
-                    {index + 1}
+                    {index === 0 ? '1' : index + 1}
                   </div>
 
                   <div>
@@ -299,7 +327,7 @@ export function Leaderboard() {
                       Bombadak #{nft.tokenId.toString()}
                     </div>
                     <div className="text-xs text-gray-400">
-                      {shortenAddress(getLastOwner(nft.ownerHistory))}
+                      {nft.currentOwner ? shortenAddress(nft.currentOwner) : 'Exploded'}
                     </div>
                   </div>
                 </div>
@@ -317,10 +345,10 @@ export function Leaderboard() {
                   {activeTab === 'longevity' && (
                     <>
                       <div className="text-sm font-bold text-green-400">
-                        {formatTimeLeft(nft.timeLeft)}
+                        {formatTime(nft.realLifetime)}
                       </div>
                       <div className="text-xs text-gray-400">
-                        {formatTransfers(nft.transferCount)}
+                        {nft.isAlive && nft.timeLeft > 0 ? 'ticked so far' : 'total ticked'}
                       </div>
                     </>
                   )}
@@ -328,9 +356,9 @@ export function Leaderboard() {
                   {activeTab === 'deaths' && (
                     <>
                       <div className="text-sm font-bold text-red-400">
-                        {formatTransfers(nft.transferCount)}
+                        {formatTime(nft.realLifetime)}
                       </div>
-                      <div className="text-xs text-gray-400">before death</div>
+                      <div className="text-xs text-gray-400">Total Ticked</div>
                     </>
                   )}
                 </div>
@@ -348,9 +376,23 @@ export function Leaderboard() {
         </div>
       )}
 
-      
+      {/* Cache info */}
+      <div className="mt-2 text-xs text-gray-500 text-center">
+        Cache: {leaderboardCache.size} entries | Last refresh: {lastRefresh ? new Date(lastRefresh).toLocaleTimeString() : 'Never'}
+      </div>
 
-     
+      {/* Refresh button */}
+      <button
+        onClick={handleManualRefresh}
+        disabled={isLoading}
+        className={`w-full mt-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+          isLoading
+            ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+            : 'bg-blue-500/20 border border-blue-500 text-blue-400 hover:bg-blue-500/30'
+        }`}
+      >
+        {isLoading ? 'Loading...' : 'Force Refresh Rankings'}
+      </button>
     </div>
   )
 }

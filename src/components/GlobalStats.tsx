@@ -21,9 +21,9 @@ interface NFTStats {
   }
 }
 
-// Cache plus long pour les stats globales
-const statsCache = new Map<string, any>()
-const CACHE_DURATION = 180000 // 3 minutes
+// Cache pour éviter de refetch les NFTs qui ne changent pas
+const nftDataCache = new Map<string, any>()
+const CACHE_DURATION = 60000 // 1 minute en millisecondes
 
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
@@ -42,19 +42,19 @@ export function GlobalStats() {
   const [isLoading, setIsLoading] = useState(true)
   const [lastRefresh, setLastRefresh] = useState(0)
 
-  const { data: championInfo, } = useReadContract({
+  const { data: championInfo, refetch: refetchChampion } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
     functionName: 'getChampionInfo',
   })
 
-  const { data: totalSupply, } = useReadContract({
+  const { data: totalSupply, refetch: refetchTotalSupply } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
     functionName: 'getTotalSupply',
   })
 
-  const { data: contractBalance, } = useBalance({
+  const { data: contractBalance, refetch: refetchBalance } = useBalance({
     address: CONTRACT_ADDRESS,
   })
 
@@ -70,86 +70,69 @@ export function GlobalStats() {
     functionName: 'getMintDeadline',
   })
 
-  // Fonction pour traiter les NFTs avec Promise.all optimisé (sans multicall)
-  const processNFTsBatch = async (tokenIds: bigint[]) => {
-    const cacheKey = `batch-${tokenIds.join('-')}`
-    const cachedData = statsCache.get(cacheKey)
+  // Fonction pour traiter les NFTs par batch avec limitation de débit
+  const processNFTBatch = async (startId: number, endId: number) => {
+    const results = []
     
-    if (cachedData && (Date.now() - cachedData.timestamp) < CACHE_DURATION) {
-      return cachedData.data
-    }
-
-    try {
-      console.log(`Processing ${tokenIds.length} NFTs with Promise.all...`)
+    // Traiter UN par UN avec délai pour éviter 429
+    for (let i = startId; i <= endId; i++) {
+      const tokenId = BigInt(i)
+      const cacheKey = `nft-${tokenId}`
+      const cachedData = nftDataCache.get(cacheKey)
       
-      // Utiliser Promise.all avec délais échelonnés pour éviter 429
-      const batchPromises = tokenIds.map(async (tokenId, index) => {
-        // Délai échelonné pour répartir la charge
-        await sleep(index * 100) // 100ms décalage par NFT
-        
-        try {
-          const data = await readContract(config, {
-            address: CONTRACT_ADDRESS,
-            abi: CONTRACT_ABI,
-            functionName: 'getNFTData',
-            args: [tokenId],
-          }) as [bigint, bigint, string[], boolean, boolean, bigint]
-          
-          return { tokenId, nftData: data }
-        } catch (err) {
-          console.error(`Error fetching NFT #${tokenId}:`, err)
-          return { tokenId, nftData: null }
-        }
-      })
-      
-      // Exécuter tous les appels en parallèle avec délais
-      const results = await Promise.all(batchPromises)
-
-      // Mettre en cache
-      statsCache.set(cacheKey, {
-        data: results,
-        timestamp: Date.now()
-      })
-
-      return results
-
-    } catch (error) {
-      console.error('Error in Promise.all batch:', error)
-      // Fallback séquentiel en dernier recours
-      const results = []
-      for (const tokenId of tokenIds) {
-        try {
-          await sleep(80) // Délai plus conservateur
-          const data = await readContract(config, {
-            address: CONTRACT_ADDRESS,
-            abi: CONTRACT_ABI,
-            functionName: 'getNFTData',
-            args: [tokenId],
-          })
-          results.push({ tokenId, nftData: data })
-        } catch (err) {
-          results.push({ tokenId, nftData: null })
-        }
+      // Utiliser le cache si les données sont récentes (< 1 minute)
+      if (cachedData && (Date.now() - cachedData.timestamp) < CACHE_DURATION) {
+        results.push(cachedData.data)
+        continue
       }
-      return results
+
+      try {
+        // Délai avant chaque appel pour éviter 429
+        await sleep(100) // 500ms entre chaque appel
+        
+        const data = await readContract(config, {
+          address: CONTRACT_ADDRESS,
+          abi: CONTRACT_ABI,
+          functionName: 'getNFTData',
+          args: [tokenId],
+        })
+        
+        const result = { tokenId, nftData: data }
+        
+        // Mettre en cache
+        nftDataCache.set(cacheKey, {
+          data: result,
+          timestamp: Date.now()
+        })
+        
+        results.push(result)
+        
+      } catch (error) {
+        console.error(`Error fetching NFT #${tokenId}:`, error)
+        results.push({ tokenId, nftData: null })
+        
+        // Délai plus long en cas d'erreur
+        await sleep(100)
+      }
     }
+
+    return results
   }
 
   const calculateGlobalStats = useCallback(async () => {
     if (!totalSupply) return
 
     const now = Date.now()
-    // Éviter les calculs trop fréquents (minimum 1 minute)
-    if (now - lastRefresh < 60000) {
+    // Éviter les calculs trop fréquents (minimum 30 secondes entre les calculs)
+    if (now - lastRefresh < 30000) {
       return
     }
 
     setIsLoading(true)
     const total = Number(totalSupply)
+    const currentTime = Math.floor(Date.now() / 1000)
     
     try {
-      console.log(`Calculating stats for ${total} NFTs using Promise.all batches...`)
-      
       let aliveCount = 0
       let deadCount = 0
       let totalTransferCount = 0
@@ -157,24 +140,17 @@ export function GlobalStats() {
       let longestLivingId: bigint | null = null
       const lifetimes: number[] = []
 
-      // Traiter par batches moyens avec Promise.all
-      const BATCH_SIZE = 10 // Réduit pour Promise.all sans multicall
+      const BATCH_SIZE = 5
       const batches = Math.ceil(total / BATCH_SIZE)
 
       for (let batchIndex = 0; batchIndex < batches; batchIndex++) {
         const startId = batchIndex * BATCH_SIZE + 1
         const endId = Math.min((batchIndex + 1) * BATCH_SIZE, total)
-        
-        // Créer le tableau des tokenIds pour ce batch
-        const tokenIds: bigint[] = []
-        for (let i = startId; i <= endId; i++) {
-          tokenIds.push(BigInt(i))
-        }
 
-        console.log(`Processing batch ${batchIndex + 1}/${batches} (${tokenIds.length} NFTs)`)
+        console.log(`Processing batch ${batchIndex + 1}/${batches} (NFTs ${startId}-${endId})`)
 
         try {
-          const batchResults = await processNFTsBatch(tokenIds)
+          const batchResults = await processNFTBatch(startId, endId)
           
           for (const result of batchResults) {
             if (!result.nftData) {
@@ -183,44 +159,47 @@ export function GlobalStats() {
             }
 
             const { tokenId, nftData } = result
-            const [, transferCount, , isAlive, isDead, timeLeft] = nftData
-          
+            const [expiryTime, transferCount, , isAlive, isDead, timeLeft] = nftData as [bigint, bigint, string[], boolean, boolean, bigint]
+
+            let realLifetime: number
             const isNFTAlive = isAlive && !isDead && Number(timeLeft) > 0
 
             if (isNFTAlive) {
+              // Estimation de la durée de vie pour les NFTs vivants
+              realLifetime = currentTime - (Number(expiryTime) - Number(timeLeft))
               aliveCount++
               lifetimes.push(Number(timeLeft))
-                            
-              const estimatedLifetime = (Number(transferCount) + 1) * 86400 - Number(timeLeft)
-              if (estimatedLifetime > longestRealLifetime) {
-                longestRealLifetime = estimatedLifetime
-                longestLivingId = tokenId
-              }
             } else {
-              deadCount++
-              
-              const estimatedLifetime = (Number(transferCount) + 1) * 86400
-              if (estimatedLifetime > longestRealLifetime) {
-                longestRealLifetime = estimatedLifetime
-                longestLivingId = tokenId
+              if (championInfo && championInfo[0] === tokenId) {
+                realLifetime = Number(championInfo[1])
+              } else {
+                // Estimation basée sur les transferts
+                realLifetime = Number(transferCount) * 86400 + 86400 // 1 jour par transfer + 1 jour initial
               }
+              deadCount++
+            }
+
+            if (realLifetime > longestRealLifetime) {
+              longestRealLifetime = realLifetime
+              longestLivingId = tokenId
             }
 
             totalTransferCount += Number(transferCount)
           }
 
-          // Délai entre batches Promise.all
           if (batchIndex < batches - 1) {
-            await sleep(50) // 1s entre batches Promise.all
+            console.log(`Waiting 1s before next batch...`)
+            await sleep(100) // 
           }
 
         } catch (error) {
           console.error(`Error processing batch ${batchIndex}:`, error)
-          await sleep(50)
+          // En cas d'erreur sur un batch, attendre plus longtemps
+          await sleep(100)
         }
       }
 
-      // Utiliser les infos du champion du contrat si disponible (priorité)
+      // Utiliser les infos du champion du contrat si disponible
       if (championInfo && championInfo[0] > 0) {
         longestLivingId = championInfo[0]
         longestRealLifetime = Number(championInfo[1])
@@ -233,11 +212,11 @@ export function GlobalStats() {
       const rewardPoolBalance = contractBalance?.value || 0n
       const formattedBalance = formatEther(rewardPoolBalance)
       
-      console.log('Stats calculated with Promise.all batches:', {
+      console.log('Stats calculated:', {
         totalMinted: total,
         totalAlive: aliveCount,
         totalDead: deadCount,
-        batchesUsed: batches
+        cacheEntries: nftDataCache.size
       })
       
       setStats({
@@ -272,7 +251,19 @@ export function GlobalStats() {
     }
   }, [totalSupply, calculateGlobalStats])
 
-  
+  const handleManualRefresh = async () => {
+    // Vider le cache pour forcer le refresh
+    nftDataCache.clear()
+    setLastRefresh(0)
+    
+    await Promise.all([
+      refetchTotalSupply(),
+      refetchBalance(),
+      refetchChampion(),
+    ])
+    
+    await calculateGlobalStats()
+  }
 
   const formatTime = (seconds: number) => {
     if (seconds <= 0) return 'Expired'
@@ -365,7 +356,7 @@ export function GlobalStats() {
         </div>
       )}
 
-      {/* Reward Pool */}
+      {/* Reward Pool - Section prominente */}
       <div className="bg-gradient-to-r from-yellow-500/20 to-orange-500/20 border border-yellow-500/50 rounded-lg p-2 mb-4">
         <div className="text-center">
           <div className="text-yellow-400 font-semibold mb-2 flex items-center justify-center gap-2">
@@ -390,15 +381,15 @@ export function GlobalStats() {
       {/* Stats principales */}
       <div className="grid grid-cols-3 gap-4 mb-6">
         <div className="bg-white/5 rounded-lg p-3 text-center">
-          <div className="text-2xl font-bold text-yellow-400">{stats.totalMinted}/500</div>
+          <div className="text-1xl font-bold text-yellow-400">{stats.totalMinted}/500</div>
           <div className="text-sm text-white">Total Minted</div>
         </div>
         <div className="bg-white/5 rounded-lg p-3 text-center">
-          <div className="text-2xl font-bold text-green-400">{stats.totalAlive}</div>
+          <div className="text-1xl font-bold text-green-400">{stats.totalAlive}</div>
           <div className="text-sm text-white">Ticking</div>
         </div>
         <div className="bg-white/5 rounded-lg p-3 text-center">
-          <div className="text-2xl font-bold text-red-400">{stats.totalDead}</div>
+          <div className="text-1xl font-bold text-red-400">{stats.totalDead}</div>
           <div className="text-sm text-white">Exploded</div>
         </div>
       </div>
@@ -416,7 +407,7 @@ export function GlobalStats() {
         </div>
       </div>
 
-      {/* Barre de progression */}
+      {/* Barre de progression survivants vs morts */}
       {stats.totalMinted > 0 && (
         <div className="mt-4">
           <div className="flex justify-between text-xs text-white mb-1">
@@ -432,9 +423,9 @@ export function GlobalStats() {
         </div>
       )}
 
-     
+      
 
-      {/* Game over */}
+      {/* Indicateur de fin de jeu */}
       {gameEnded && (
         <div className="mt-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-center">
           <div className="text-red-400 font-semibold">🎮 Game Over</div>
@@ -442,7 +433,18 @@ export function GlobalStats() {
         </div>
       )}
 
-      
+      {/* Bouton refresh manuel */}
+      <button
+        onClick={handleManualRefresh}
+        disabled={isLoading}
+        className={`w-full mt-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
+          isLoading
+            ? 'bg-gray-600 text-white cursor-not-allowed'
+            : 'bg-blue-500/20 border border-blue-500 text-blue-400 hover:bg-blue-500/30'
+        }`}
+      >
+        {isLoading ? 'Updating...' : 'Force Refresh'}
+      </button>
     </div>
   )
 }
