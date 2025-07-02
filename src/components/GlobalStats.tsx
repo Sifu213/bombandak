@@ -88,7 +88,7 @@ export function GlobalStats() {
             args: [tokenId],
           }) as [bigint, bigint, string[], boolean, boolean, bigint]
 
-          const [expiryTime, transferCount, ownerHistory, isAlive, isDead, timeLeft] = nftData
+          const [expiryTime, transferCount, isAlive, isDead, timeLeft] = nftData
 
           // Récupérer le mintTime depuis nftData directement
           const nftDataStruct = await readContract(config, {

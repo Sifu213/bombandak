@@ -10,7 +10,7 @@ interface NFTCardProps {
 export function NFTCard({ tokenId }: NFTCardProps) {
   const [showTransfer, setShowTransfer] = useState(false)
   const [imageUrl, setImageUrl] = useState<string | null>(null)
-  const [isImageLoading, setIsImageLoading] = useState(true)
+  const [setIsImageLoading] = useState(true)
 
 
   const { data: nftData } = useReadContract({
@@ -57,12 +57,7 @@ export function NFTCard({ tokenId }: NFTCardProps) {
   fetchImageFromMetadata()
 }, [tokenURI])
 
-  const { data: owner } = useReadContract({
-    address: CONTRACT_ADDRESS,
-    abi: CONTRACT_ABI,
-    functionName: 'ownerOf',
-    args: [tokenId],
-  })
+
 
   if (!nftData) {
     return (
@@ -74,7 +69,7 @@ export function NFTCard({ tokenId }: NFTCardProps) {
     )
   }
 
-  const [expiryTime, transferCount, ownerHistory, isAlive, isDead, timeLeft] = nftData
+  const [ transferCount, ownerHistory, isAlive, isDead, timeLeft] = nftData
 
   const formatTimeLeft = (seconds: bigint) => {
     const totalSeconds = Number(seconds)
