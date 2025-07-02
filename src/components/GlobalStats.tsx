@@ -42,19 +42,19 @@ export function GlobalStats() {
   const [isLoading, setIsLoading] = useState(true)
   const [lastRefresh, setLastRefresh] = useState(0)
 
-  const { data: championInfo, refetch: refetchChampion } = useReadContract({
+  const { data: championInfo } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
     functionName: 'getChampionInfo',
   })
 
-  const { data: totalSupply, refetch: refetchTotalSupply } = useReadContract({
+  const { data: totalSupply  } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
     functionName: 'getTotalSupply',
   })
 
-  const { data: contractBalance, refetch: refetchBalance } = useBalance({
+  const { data: contractBalance } = useBalance({
     address: CONTRACT_ADDRESS,
   })
 
@@ -289,11 +289,7 @@ export function GlobalStats() {
     return currentTime <= deadline && !gameEnded
   }
 
-  const calculateRewardPerSurvivor = () => {
-    if (stats.totalAlive === 0) return '0.00'
-    const rewardPerSurvivor = parseFloat(stats.rewardPool.formatted) / stats.totalAlive
-    return rewardPerSurvivor.toFixed(1)
-  }
+ 
 
   return (
     <div className="border-white/20">
@@ -352,11 +348,7 @@ export function GlobalStats() {
           <div className="text-2xl lg:text-3xl font-bold text-white mb-1">
             {stats.rewardPool.formatted} MON
           </div>
-          {stats.totalAlive > 0 && (
-            <div className="text-sm text-yellow-200">
-              ~{calculateRewardPerSurvivor()} MON per survivor
-            </div>
-          )}
+          
           {gameEnded && (
             <div className="text-xs text-green-400 mt-1">
               Game Ended - Rewards Distributed
