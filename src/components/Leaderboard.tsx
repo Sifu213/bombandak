@@ -289,7 +289,7 @@ export function Leaderboard() {
                     ? 'bg-green-500/20 text-green-400 border border-green-500/50'
                     : 'bg-red-500/20 text-red-400 border border-red-500/50'
                 }`}>
-                  {nft.isAlive && !nft.isDead && nft.timeLeft > 0 ? 'ALIVE' : 'EXPLODED'}
+                  {nft.isAlive && !nft.isDead && nft.timeLeft > 0 ? 'TICKING' : 'EXPLODED'}
                 </div>
               </div>
             ))
