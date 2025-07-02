@@ -78,22 +78,7 @@ export function Leaderboard() {
           realLifetime = (Number(transferCount) + 1) * 86400 // +1 pour la durée initiale
         }
 
-        // Récupérer le propriétaire actuel seulement si le NFT est vivant
-        let currentOwner = ''
-        if (isAlive && !isDead && timeLeft > 0n) {
-          try {
-            await sleep(100) // Délai supplémentaire
-            currentOwner = await readContract(config, {
-              address: CONTRACT_ADDRESS,
-              abi: CONTRACT_ABI,
-              functionName: 'ownerOf',
-              args: [tokenId],
-            }) as string
-          } catch {
-            // En cas d'erreur, utiliser le dernier propriétaire de l'historique
-            currentOwner = ownerHistory[ownerHistory.length - 1] || ''
-          }
-        }
+        
 
         const result = {
           tokenId,
@@ -102,8 +87,8 @@ export function Leaderboard() {
           realLifetime,
           isAlive,
           isDead,
-          ownerHistory,
-          currentOwner
+          ownerHistory
+          
         }
 
         // Mettre en cache
@@ -140,7 +125,7 @@ export function Leaderboard() {
     try {
       console.log(`Fetching leaderboard data for ${total} NFTs...`)
       
-      // Traiter par petits batches de 3 NFTs
+      
       const BATCH_SIZE = 10
       const batches = Math.ceil(total / BATCH_SIZE)
       const allNFTs: NFTLeaderboardEntry[] = []
@@ -157,13 +142,13 @@ export function Leaderboard() {
 
           // Délai plus long entre les batches
           if (batchIndex < batches - 1) {
-            console.log(`Waiting 3s before next batch...`)
-            await sleep(600) // 3 secondes entre batches
+            
+            await sleep(200) // 
           }
 
         } catch (error) {
           console.error(`Error processing batch ${batchIndex}:`, error)
-          await sleep(1000) // Attendre 5s en cas d'erreur
+          await sleep(200) // Attendre 5s en cas d'erreur
         }
       }
 

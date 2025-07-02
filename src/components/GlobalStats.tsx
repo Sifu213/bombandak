@@ -188,7 +188,7 @@ export function GlobalStats() {
           }
 
           if (batchIndex < batches - 1) {
-            console.log(`Waiting 1s before next batch...`)
+            
             await sleep(100) // 
           }
 
