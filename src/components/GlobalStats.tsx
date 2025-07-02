@@ -194,7 +194,7 @@ export function GlobalStats() {
       refetchTotalSupply()
       refetchBalance()
       calculateGlobalStats()
-    }, 10000) 
+    }, 100000) 
 
     return () => clearInterval(interval)
   }, [totalSupply])
