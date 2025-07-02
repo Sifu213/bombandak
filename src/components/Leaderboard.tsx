@@ -169,12 +169,7 @@ export function Leaderboard() {
     }
   }, [totalSupply, fetchLeaderboardData])
 
-  // Fonction de refresh manuel qui vide le cache
-  const handleManualRefresh = async () => {
-    leaderboardCache.clear()
-    setLastRefresh(0)
-    await fetchLeaderboardData()
-  }
+ 
 
   const getFilteredData = () => {
     let filtered = [...leaderboard]
@@ -361,23 +356,9 @@ export function Leaderboard() {
         </div>
       )}
 
-      {/* Cache info */}
-      <div className="mt-2 text-xs text-gray-500 text-center">
-        Cache: {leaderboardCache.size} entries | Last refresh: {lastRefresh ? new Date(lastRefresh).toLocaleTimeString() : 'Never'}
-      </div>
+      
 
-      {/* Refresh button */}
-      <button
-        onClick={handleManualRefresh}
-        disabled={isLoading}
-        className={`w-full mt-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-          isLoading
-            ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-            : 'bg-blue-500/20 border border-blue-500 text-blue-400 hover:bg-blue-500/30'
-        }`}
-      >
-        {isLoading ? 'Loading...' : 'Force Refresh Rankings'}
-      </button>
+      
     </div>
   )
 }

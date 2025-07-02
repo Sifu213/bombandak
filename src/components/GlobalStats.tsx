@@ -251,19 +251,6 @@ export function GlobalStats() {
     }
   }, [totalSupply, calculateGlobalStats])
 
-  const handleManualRefresh = async () => {
-    // Vider le cache pour forcer le refresh
-    nftDataCache.clear()
-    setLastRefresh(0)
-    
-    await Promise.all([
-      refetchTotalSupply(),
-      refetchBalance(),
-      refetchChampion(),
-    ])
-    
-    await calculateGlobalStats()
-  }
 
   const formatTime = (seconds: number) => {
     if (seconds <= 0) return 'Expired'
@@ -433,18 +420,7 @@ export function GlobalStats() {
         </div>
       )}
 
-      {/* Bouton refresh manuel */}
-      <button
-        onClick={handleManualRefresh}
-        disabled={isLoading}
-        className={`w-full mt-4 py-2 rounded-lg text-sm font-semibold transition-colors ${
-          isLoading
-            ? 'bg-gray-600 text-white cursor-not-allowed'
-            : 'bg-blue-500/20 border border-blue-500 text-blue-400 hover:bg-blue-500/30'
-        }`}
-      >
-        {isLoading ? 'Updating...' : 'Force Refresh'}
-      </button>
+      
     </div>
   )
 }
