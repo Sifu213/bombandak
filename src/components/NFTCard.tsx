@@ -134,7 +134,7 @@ export function NFTCard({ tokenId }: NFTCardProps) {
               <img
                 src={imageUrl}
                 alt={`Bombandak #${tokenId}`}
-                className={`w-full h-48 object-cover rounded-lg transition-opacity duration-300 ${
+                className={`w-full h-auto object-cover rounded-lg transition-opacity duration-300 ${
                   isImageLoading ? 'opacity-0 absolute inset-0' : 'opacity-100'
                 }`}
                 onLoad={handleImageLoad}
@@ -144,7 +144,7 @@ export function NFTCard({ tokenId }: NFTCardProps) {
             
             {/* Fallback en cas d'erreur */}
             {(imageError || (!imageUrl && !isImageLoading)) && (
-              <div className="w-full h-48 bg-gray-700 rounded-lg flex items-center justify-center">
+              <div className="w-full h-auto bg-gray-700 rounded-lg flex items-center justify-center">
                 <div className="text-center text-gray-400">
                   <div className="text-4xl mb-2">💣</div>
                   <div className="text-sm">Image not available</div>
