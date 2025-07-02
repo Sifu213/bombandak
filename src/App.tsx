@@ -86,8 +86,8 @@ function App() {
 
       <footer className="w-full px-4 sm:px-6 lg:px-8 py-0">
         <div className="max-w-7xl mx-auto text-center">
-          <p className="text-gray-400 text-sm">
-            <nav>
+          
+            <nav className="text-gray-400 text-sm">
               <ul className="flex items-center justify-center gap-4">
                 <li>
                   Made by <a href="https://x.com/sifu_lam" target="_blank" rel="noopener noreferrer">Sifu_lam</a> for
@@ -97,7 +97,7 @@ function App() {
                 </li>
               </ul>
             </nav>
-          </p>
+          
         </div>
       </footer>
     </div>

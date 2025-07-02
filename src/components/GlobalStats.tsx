@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useReadContract, useBalance } from 'wagmi'
 import { readContract } from '@wagmi/core'
 import { config } from '../config/wagmi'
@@ -21,6 +21,10 @@ interface NFTStats {
   }
 }
 
+// Cache pour éviter de refetch les NFTs qui ne changent pas
+const nftDataCache = new Map<string, any>()
+const CACHE_DURATION = 60000 // 1 minute en millisecondes
+
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
@@ -36,14 +40,13 @@ export function GlobalStats() {
     rewardPool: { balance: '0', formatted: '0.00' }
   })
   const [isLoading, setIsLoading] = useState(true)
+  const [lastRefresh, setLastRefresh] = useState(0)
 
-
-  const { data: championInfo } = useReadContract({
+  const { data: championInfo, refetch: refetchChampion } = useReadContract({
     address: CONTRACT_ADDRESS,
     abi: CONTRACT_ABI,
     functionName: 'getChampionInfo',
   })
-
 
   const { data: totalSupply, refetch: refetchTotalSupply } = useReadContract({
     address: CONTRACT_ADDRESS,
@@ -51,11 +54,9 @@ export function GlobalStats() {
     functionName: 'getTotalSupply',
   })
 
-
   const { data: contractBalance, refetch: refetchBalance } = useBalance({
     address: CONTRACT_ADDRESS,
   })
-
 
   const { data: gameEnded } = useReadContract({
     address: CONTRACT_ADDRESS,
@@ -69,13 +70,67 @@ export function GlobalStats() {
     functionName: 'getMintDeadline',
   })
 
- 
-  const calculateGlobalStats = async () => {
+  // Fonction pour traiter les NFTs par batch avec limitation de débit
+  const processNFTBatch = async (startId: number, endId: number) => {
+    const results = []
+    
+    // Traiter UN par UN avec délai pour éviter 429
+    for (let i = startId; i <= endId; i++) {
+      const tokenId = BigInt(i)
+      const cacheKey = `nft-${tokenId}`
+      const cachedData = nftDataCache.get(cacheKey)
+      
+      // Utiliser le cache si les données sont récentes (< 1 minute)
+      if (cachedData && (Date.now() - cachedData.timestamp) < CACHE_DURATION) {
+        results.push(cachedData.data)
+        continue
+      }
+
+      try {
+        // Délai avant chaque appel pour éviter 429
+        await sleep(500) // 500ms entre chaque appel
+        
+        const data = await readContract(config, {
+          address: CONTRACT_ADDRESS,
+          abi: CONTRACT_ABI,
+          functionName: 'getNFTData',
+          args: [tokenId],
+        })
+        
+        const result = { tokenId, nftData: data }
+        
+        // Mettre en cache
+        nftDataCache.set(cacheKey, {
+          data: result,
+          timestamp: Date.now()
+        })
+        
+        results.push(result)
+        
+      } catch (error) {
+        console.error(`Error fetching NFT #${tokenId}:`, error)
+        results.push({ tokenId, nftData: null })
+        
+        // Délai plus long en cas d'erreur
+        await sleep(1000)
+      }
+    }
+
+    return results
+  }
+
+  const calculateGlobalStats = useCallback(async () => {
     if (!totalSupply) return
+
+    const now = Date.now()
+    // Éviter les calculs trop fréquents (minimum 30 secondes entre les calculs)
+    if (now - lastRefresh < 30000) {
+      return
+    }
 
     setIsLoading(true)
     const total = Number(totalSupply)
-    const currentTime = Math.floor(Date.now() / 1000) // Timestamp actuel en secondes
+    const currentTime = Math.floor(Date.now() / 1000)
     
     try {
       let aliveCount = 0
@@ -85,67 +140,66 @@ export function GlobalStats() {
       let longestLivingId: bigint | null = null
       const lifetimes: number[] = []
 
-      for (let i = 1; i <= total; i++) {
-        const tokenId = BigInt(i)
+      const BATCH_SIZE = 5
+      const batches = Math.ceil(total / BATCH_SIZE)
+
+      for (let batchIndex = 0; batchIndex < batches; batchIndex++) {
+        const startId = batchIndex * BATCH_SIZE + 1
+        const endId = Math.min((batchIndex + 1) * BATCH_SIZE, total)
+
+        console.log(`Processing batch ${batchIndex + 1}/${batches} (NFTs ${startId}-${endId})`)
 
         try {
-          const nftData = await readContract(config, {
-            address: CONTRACT_ADDRESS,
-            abi: CONTRACT_ABI,
-            functionName: 'getNFTData',
-            args: [tokenId],
-          }) as [bigint, bigint, string[], boolean, boolean, bigint]
-
-          const [expiryTime, transferCount, , isAlive, isDead, timeLeft] = nftData
-
-          const nftDataStruct = await readContract(config, {
-            address: CONTRACT_ADDRESS,
-            abi: CONTRACT_ABI,
-            functionName: 'nftData',
-            args: [tokenId],
-          }) as [bigint, bigint, bigint, boolean, boolean]
-
-          const [mintTime] = nftDataStruct
+          const batchResults = await processNFTBatch(startId, endId)
           
-          await sleep(100)
-
-          let realLifetime: number
-          const isNFTAlive = isAlive && !isDead && Number(timeLeft) > 0
-          
-          if (isNFTAlive) {
-            realLifetime = currentTime - Number(mintTime)
-            aliveCount++
-            lifetimes.push(Number(timeLeft))
-          } else {
-            if (championInfo && championInfo[0] === tokenId) {
-              realLifetime = Number(championInfo[1]) 
-            } else {
-              realLifetime = Number(expiryTime) - Number(mintTime)
+          for (const result of batchResults) {
+            if (!result.nftData) {
+              deadCount++
+              continue
             }
-            deadCount++
+
+            const { tokenId, nftData } = result
+            const [expiryTime, transferCount, , isAlive, isDead, timeLeft] = nftData as [bigint, bigint, string[], boolean, boolean, bigint]
+
+            let realLifetime: number
+            const isNFTAlive = isAlive && !isDead && Number(timeLeft) > 0
+
+            if (isNFTAlive) {
+              // Estimation de la durée de vie pour les NFTs vivants
+              realLifetime = currentTime - (Number(expiryTime) - Number(timeLeft))
+              aliveCount++
+              lifetimes.push(Number(timeLeft))
+            } else {
+              if (championInfo && championInfo[0] === tokenId) {
+                realLifetime = Number(championInfo[1])
+              } else {
+                // Estimation basée sur les transferts
+                realLifetime = Number(transferCount) * 86400 + 86400 // 1 jour par transfer + 1 jour initial
+              }
+              deadCount++
+            }
+
+            if (realLifetime > longestRealLifetime) {
+              longestRealLifetime = realLifetime
+              longestLivingId = tokenId
+            }
+
+            totalTransferCount += Number(transferCount)
           }
 
-          if (realLifetime > longestRealLifetime) {
-            longestRealLifetime = realLifetime
-            longestLivingId = tokenId
+          if (batchIndex < batches - 1) {
+            console.log(`Waiting 1s before next batch...`)
+            await sleep(600) // 
           }
-
-          totalTransferCount += Number(transferCount)
-
-          console.log(`NFT #${tokenId}:`, {
-            isAlive,
-            isDead,
-            timeLeft: Number(timeLeft),
-            isNFTAlive,
-            realLifetime
-          })
 
         } catch (error) {
-          console.error(`Error processing NFT #${tokenId}:`, error)
-          deadCount++
+          console.error(`Error processing batch ${batchIndex}:`, error)
+          // En cas d'erreur sur un batch, attendre plus longtemps
+          await sleep(600)
         }
       }
 
+      // Utiliser les infos du champion du contrat si disponible
       if (championInfo && championInfo[0] > 0) {
         longestLivingId = championInfo[0]
         longestRealLifetime = Number(championInfo[1])
@@ -158,10 +212,11 @@ export function GlobalStats() {
       const rewardPoolBalance = contractBalance?.value || 0n
       const formattedBalance = formatEther(rewardPoolBalance)
       
-      console.log('Final stats:', {
+      console.log('Stats calculated:', {
         totalMinted: total,
         totalAlive: aliveCount,
-        totalDead: deadCount
+        totalDead: deadCount,
+        cacheEntries: nftDataCache.size
       })
       
       setStats({
@@ -180,37 +235,34 @@ export function GlobalStats() {
         }
       })
 
+      setLastRefresh(now)
+
     } catch (error) {
       console.error('Error calculating global stats:', error)
     } finally {
       setIsLoading(false)
     }
-  }
+  }, [totalSupply, championInfo, contractBalance, lastRefresh])
 
   // Calculer les stats au chargement
   useEffect(() => {
     if (totalSupply) {
       calculateGlobalStats()
     }
-  }, [totalSupply, championInfo, contractBalance])
-
-  // Auto-refresh 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      refetchTotalSupply()
-      refetchBalance()
-      calculateGlobalStats()
-    }, 1000000) 
-
-    return () => clearInterval(interval)
-  }, [totalSupply])
+  }, [totalSupply, calculateGlobalStats])
 
   const handleManualRefresh = async () => {
+    // Vider le cache pour forcer le refresh
+    nftDataCache.clear()
+    setLastRefresh(0)
+    
     await Promise.all([
       refetchTotalSupply(),
       refetchBalance(),
-      calculateGlobalStats()
+      refetchChampion(),
     ])
+    
+    await calculateGlobalStats()
   }
 
   const formatTime = (seconds: number) => {
@@ -256,7 +308,6 @@ export function GlobalStats() {
     return rewardPerSurvivor.toFixed(1)
   }
 
-
   return (
     <div className="border-white/20">
       <div className="flex justify-between items-center mb-2">
@@ -267,7 +318,7 @@ export function GlobalStats() {
           {isLoading && (
             <div className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin"></div>
           )}
-          <span className="text-xs text-gray-400">Auto-refresh: 10s</span>
+          
         </div>
       </div>
 
@@ -354,7 +405,6 @@ export function GlobalStats() {
           <span className="text-white">Avg Remaining:</span>
           <span className="text-purple-400 font-semibold">{formatTime(stats.averageLifetime)}</span>
         </div>
-        
       </div>
 
       {/* Barre de progression survivants vs morts */}
@@ -372,6 +422,8 @@ export function GlobalStats() {
           </div>
         </div>
       )}
+
+      
 
       {/* Indicateur de fin de jeu */}
       {gameEnded && (
@@ -391,7 +443,7 @@ export function GlobalStats() {
             : 'bg-blue-500/20 border border-blue-500 text-blue-400 hover:bg-blue-500/30'
         }`}
       >
-        {isLoading ? 'Updating...' : 'Refresh'}
+        {isLoading ? 'Updating...' : 'Force Refresh'}
       </button>
     </div>
   )
