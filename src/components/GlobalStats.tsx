@@ -99,20 +99,19 @@ export function GlobalStats() {
           }) as [bigint, bigint, bigint, boolean, boolean]
 
           const [mintTime] = nftDataStruct
-
-          // Calculer la vraie durée de vie
+          
           let realLifetime: number
-          if (isAlive && !isDead && timeLeft > 0n) {
-            // NFT vivant : temps depuis le mint
+          if (isAlive && !isDead) {
+            
             realLifetime = currentTime - Number(mintTime)
             aliveCount++
             lifetimes.push(Number(timeLeft))
           } else {
-            // NFT mort : utiliser le record du contrat ou calculer
+            
             if (championInfo && championInfo[0] === tokenId) {
               realLifetime = Number(championInfo[1]) // lifetime du champion
             } else {
-              // Approximation : temps entre mint et mort (expiryTime car reset à la mort)
+              
               realLifetime = Number(expiryTime) - Number(mintTime)
             }
             deadCount++

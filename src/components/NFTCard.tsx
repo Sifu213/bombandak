@@ -69,7 +69,7 @@ export function NFTCard({ tokenId }: NFTCardProps) {
     )
   }
 
-  const [ transferCount, ownerHistory, isAlive, isDead, timeLeft] = nftData
+  const [ ,transferCount, ownerHistory, isAlive, isDead, timeLeft] = nftData
 
   const formatTimeLeft = (seconds: bigint) => {
     const totalSeconds = Number(seconds)
@@ -85,7 +85,7 @@ export function NFTCard({ tokenId }: NFTCardProps) {
   }
 
   const getStatusColor = () => {
-    if (isDead || !isAlive || timeLeft === 0n) return 'border-red-500 bg-red-500/10'
+    if (isDead || !isAlive) return 'border-red-500 bg-red-500/10'
     if (Number(timeLeft) < 24 * 60 * 60) return 'border-orange-500 bg-orange-500/10' // < 1 day
     if (Number(timeLeft) < 3 * 24 * 60 * 60) return 'border-yellow-500 bg-yellow-500/10' // < 3 days
     return 'border-green-500 bg-green-500/10' // Safe
@@ -101,7 +101,7 @@ export function NFTCard({ tokenId }: NFTCardProps) {
           </h3>
           <span className={`px-2 py-1 rounded text-xs font-semibold ${isAlive && timeLeft > 0n ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
             }`}>
-            {isAlive && timeLeft > 0n ? 'ALIVE' : 'EXPLODED'}
+            {isAlive ? 'ALIVE' : 'EXPLODED'}
           </span>
         </div>
 
@@ -141,7 +141,7 @@ export function NFTCard({ tokenId }: NFTCardProps) {
         </div>
 
       
-        {isAlive && timeLeft > 0n && (
+        {isAlive && (
           <button
             onClick={() => setShowTransfer(true)}
             className="w-full py-2 rounded-xl font-semibold text-lg bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white transform hover:scale-105 transition-all duration-200 shadow-lg"
@@ -151,7 +151,7 @@ export function NFTCard({ tokenId }: NFTCardProps) {
           </button>
         )}
 
-        {(!isAlive || timeLeft === 0n) && (
+        {(!isAlive) && (
           <div className="w-full py-2 bg-red-500/20 text-red-400 text-center rounded-lg font-semibold">
             NFT exploded
           </div>
