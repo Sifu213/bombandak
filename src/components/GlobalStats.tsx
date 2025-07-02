@@ -21,6 +21,10 @@ interface NFTStats {
   }
 }
 
+function sleep(ms: number) {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
+
 export function GlobalStats() {
   const [stats, setStats] = useState<NFTStats>({
     totalMinted: 0,
@@ -103,6 +107,8 @@ export function GlobalStats() {
 
           const [mintTime] = nftDataStruct
           
+          await sleep(100)
+
           let realLifetime: number
           const isNFTAlive = isAlive && !isDead && Number(timeLeft) > 0
           
@@ -194,7 +200,7 @@ export function GlobalStats() {
       refetchTotalSupply()
       refetchBalance()
       calculateGlobalStats()
-    }, 100000) 
+    }, 1000000) 
 
     return () => clearInterval(interval)
   }, [totalSupply])
