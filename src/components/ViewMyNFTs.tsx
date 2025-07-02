@@ -144,12 +144,7 @@ export function ViewMyNFTs() {
             <div className="text-center py-16">
               <h3 className="text-2xl font-bold text-white mb-4">No NFTs Found</h3>
               <p className="text-gray-400 text-lg mb-6">You don't own any Bombandak NFTs yet</p>
-              <button 
-                onClick={handleClose}
-                className="px-8 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl hover:from-green-600 hover:to-green-700 font-semibold transition-all duration-200 transform hover:scale-105"
-              >
-                Mint Your First NFT
-              </button>
+              
             </div>
           ) : (
             <>
