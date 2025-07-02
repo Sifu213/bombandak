@@ -115,7 +115,7 @@ export function NFTCard({ tokenId }: NFTCardProps) {
           <span className={`px-2 py-1 rounded text-xs font-semibold ${
             isAlive && timeLeft > 0n ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
           }`}>
-            {isAlive ? 'ALIVE' : 'EXPLODED'}
+            {isAlive ? 'TICKING' : 'EXPLODED'}
           </span>
         </div>
 

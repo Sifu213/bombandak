@@ -8,16 +8,17 @@ contract Bombadak is ERC721, Ownable {
     uint256 public constant MINT_PRICE = 1 ether;
     uint256 public constant INITIAL_LIFETIME = 1 days;
     uint256 public constant TRANSFER_BONUS = 1 days;
-    uint256 public constant MAX_SUPPLY = 100;
+    uint256 public constant MAX_SUPPLY = 500;
+    
+    // Date limite pour mint (16 juillet 2025 à 23:59:59 UTC)
+    uint256 public constant MINT_DEADLINE = 1752710399; 
     
     uint256 private _tokenIdCounter;
     bool public gameEnded = false;
     
-    // Tracking du champion de longévité
     uint256 public longestLivingTokenId = 0;
     uint256 public longestLifetime = 0;
     
-    // URIs pour les métadonnées des NFTs
     string private _baseTokenURIAlive;
     string private _baseTokenURIDead;
     
@@ -27,7 +28,7 @@ contract Bombadak is ERC721, Ownable {
         uint256 transferCount;
         address[] ownerHistory;
         bool isAlive;
-        bool isDead; // Nouveau: état mort (non-transférable mais pas burn)
+        bool isDead; 
     }
     
     mapping(uint256 => NFTData) public nftData;
@@ -39,6 +40,7 @@ contract Bombadak is ERC721, Ownable {
     event GameEnded(uint256 indexed championTokenId, uint256 totalRewards, uint256 winnersCount);
     event RewardDistributed(address indexed winner, uint256 amount);
     event RewardPoolIncreased(address indexed contributor, uint256 amount, uint256 newTotal);
+    event MintDeadlineUpdated(uint256 oldDeadline, uint256 newDeadline);
     
     constructor(string memory baseTokenURIAlive, string memory baseTokenURIDead) 
         ERC721("Bombadak", "BMDK") Ownable(msg.sender) {
@@ -57,13 +59,13 @@ contract Bombadak is ERC721, Ownable {
         require(!hasMinted[msg.sender], "Already minted");
         require(_tokenIdCounter < MAX_SUPPLY, "Maximum supply reached");
         require(!gameEnded, "Game has ended");
+        require(block.timestamp <= MINT_DEADLINE, "Mint deadline has passed");
         
         _tokenIdCounter++;
         uint256 tokenId = _tokenIdCounter;
         
         _safeMint(msg.sender, tokenId);
         
-        // Initialize NFT data
         nftData[tokenId].mintTime = block.timestamp;
         nftData[tokenId].expiryTime = block.timestamp + INITIAL_LIFETIME;
         nftData[tokenId].transferCount = 0;
@@ -81,7 +83,6 @@ contract Bombadak is ERC721, Ownable {
         require(to != address(0), "Cannot transfer to zero address");
         require(to != msg.sender, "Cannot transfer to yourself");
         
-        // Check if 'to' address has already owned this NFT
         address[] memory history = nftData[tokenId].ownerHistory;
         for (uint i = 0; i < history.length; i++) {
             if (history[i] == to) {
@@ -90,23 +91,19 @@ contract Bombadak is ERC721, Ownable {
             }
         }
         
-        // Update NFT data
         nftData[tokenId].expiryTime = block.timestamp + TRANSFER_BONUS;
         nftData[tokenId].transferCount++;
         nftData[tokenId].ownerHistory.push(to);
         
-        // Transfer the NFT
         _transfer(msg.sender, to, tokenId);
         
         emit NFTTransferred(tokenId, msg.sender, to, nftData[tokenId].expiryTime, nftData[tokenId].transferCount);
     }
     
-    // Nouvelle fonction pour "tuer" un NFT sans le burn
     function _killNFT(uint256 tokenId, string memory reason) internal {
-        // Calculer la durée de vie totale avant de tuer le NFT
+
         uint256 totalLifetime = nftData[tokenId].transferCount * TRANSFER_BONUS + INITIAL_LIFETIME;
         
-        // Vérifier si c'est un nouveau record de longévité
         if (totalLifetime > longestLifetime) {
             longestLifetime = totalLifetime;
             longestLivingTokenId = tokenId;
@@ -114,16 +111,14 @@ contract Bombadak is ERC721, Ownable {
         
         nftData[tokenId].isAlive = false;
         nftData[tokenId].isDead = true;
-        nftData[tokenId].expiryTime = block.timestamp; // Mettre le temps de vie à zéro
+        nftData[tokenId].expiryTime = block.timestamp;
         emit NFTDied(tokenId, msg.sender, reason);
     }
     
-    // Fonction publique pour marquer les NFTs expirés comme morts
     function markExpiredNFTs(uint256[] calldata tokenIds) external {
         for (uint i = 0; i < tokenIds.length; i++) {
             uint256 tokenId = tokenIds[i];
             
-            // Vérifier que le NFT existe et est expiré
             if (nftData[tokenId].isAlive && 
                 !nftData[tokenId].isDead && 
                 block.timestamp >= nftData[tokenId].expiryTime) {
@@ -132,7 +127,6 @@ contract Bombadak is ERC721, Ownable {
         }
     }
     
-    // NOUVELLE FONCTION: Ajouter des MON à la reward pool
     function addToRewardPool() external payable onlyOwner {
         require(msg.value > 0, "Must send MON to add to reward pool");
         require(!gameEnded, "Cannot add to reward pool after game has ended");
@@ -140,7 +134,6 @@ contract Bombadak is ERC721, Ownable {
         emit RewardPoolIncreased(msg.sender, msg.value, address(this).balance);
     }
     
-    // Fonction alternative pour ajouter un montant spécifique
     function addToRewardPoolWithAmount() external payable onlyOwner {
         require(msg.value > 0, "Must send MON to add to reward pool");
         require(!gameEnded, "Cannot add to reward pool after game has ended");
@@ -148,27 +141,39 @@ contract Bombadak is ERC721, Ownable {
         emit RewardPoolIncreased(msg.sender, msg.value, address(this).balance);
     }
     
-    // Fonction pour voir le montant total dans la reward pool
     function getRewardPoolBalance() external view returns (uint256) {
         return address(this).balance;
     }
     
-    // Override du tokenURI pour images dynamiques
+    function isMintActive() external view returns (bool) {
+        return block.timestamp <= MINT_DEADLINE && 
+               _tokenIdCounter < MAX_SUPPLY && 
+               !gameEnded;
+    }
+    
+    function getTimeLeftToMint() external view returns (uint256) {
+        if (block.timestamp >= MINT_DEADLINE) {
+            return 0;
+        }
+        return MINT_DEADLINE - block.timestamp;
+    }
+    
+    function getMintDeadline() external pure returns (uint256) {
+        return MINT_DEADLINE;
+    }
+    
     function tokenURI(uint256 tokenId) public view override returns (string memory) {
         require(_ownerOf(tokenId) != address(0), "Token does not exist");
         
         NFTData memory data = nftData[tokenId];
         
-        // Si le NFT est mort ou expiré, retourner l'URI "dead"
         if (data.isDead || !data.isAlive || block.timestamp >= data.expiryTime) {
             return _baseTokenURIDead;
         }
         
-        // Sinon retourner l'URI "alive"
         return _baseTokenURIAlive;
     }
     
-    // Fonctions pour mettre à jour les URIs (owner only)
     function setBaseTokenURIAlive(string memory newURI) external onlyOwner {
         _baseTokenURIAlive = newURI;
     }
@@ -177,7 +182,6 @@ contract Bombadak is ERC721, Ownable {
         _baseTokenURIDead = newURI;
     }
     
-    // View functions
     function getNFTData(uint256 tokenId) external view returns (
         uint256 expiryTime,
         uint256 transferCount,
@@ -212,7 +216,6 @@ contract Bombadak is ERC721, Ownable {
             }
         }
         
-        // Resize array to actual count
         uint256[] memory result = new uint256[](expiredCount);
         for (uint256 i = 0; i < expiredCount; i++) {
             result[i] = expired[i];
@@ -257,22 +260,19 @@ contract Bombadak is ERC721, Ownable {
                block.timestamp >= nftData[tokenId].expiryTime;
     }
     
-    // Emergency functions
-    // Fonction pour terminer le jeu et distribuer les récompenses
     function endGameAndDistribute() external onlyOwner {
         require(!gameEnded, "Game already ended");
-        require(_tokenIdCounter == MAX_SUPPLY, "Not all NFTs minted yet");
+        require(_tokenIdCounter == MAX_SUPPLY || block.timestamp > MINT_DEADLINE, "Not all NFTs minted yet and mint deadline not passed");
         require(areAllNFTsDead(), "Not all NFTs are dead yet");
         require(longestLivingTokenId > 0, "No champion found");
         
         gameEnded = true;
         
-        // Récupérer la liste des gagnants (propriétaires du NFT champion)
         address[] memory winners = nftData[longestLivingTokenId].ownerHistory;
         uint256 totalRewards = address(this).balance;
         uint256 rewardPerWinner = totalRewards / winners.length;
         
-        // Distribuer les récompenses
+
         for (uint i = 0; i < winners.length; i++) {
             if (rewardPerWinner > 0) {
                 payable(winners[i]).transfer(rewardPerWinner);
@@ -282,8 +282,7 @@ contract Bombadak is ERC721, Ownable {
         
         emit GameEnded(longestLivingTokenId, totalRewards, winners.length);
     }
-    
-    // Fonction pour vérifier si tous les NFTs sont morts
+
     function areAllNFTsDead() public view returns (bool) {
         for (uint256 i = 1; i <= _tokenIdCounter; i++) {
             if (nftData[i].isAlive && !nftData[i].isDead && block.timestamp < nftData[i].expiryTime) {
@@ -303,8 +302,6 @@ contract Bombadak is ERC721, Ownable {
         payable(owner()).transfer(balance);
     }
     
-    // Allow the contract to receive ETH
-        // Fonction withdraw modifiée (seulement si le jeu est terminé)
     function withdraw() external onlyOwner {
         require(gameEnded, "Cannot withdraw before game ends");
         uint256 balance = address(this).balance;
@@ -312,7 +309,6 @@ contract Bombadak is ERC721, Ownable {
         payable(owner()).transfer(balance);
     }
     
-    // Nouvelle fonction pour voir les infos du champion
     function getChampionInfo() external view returns (
         uint256 tokenId,
         uint256 lifetime,
