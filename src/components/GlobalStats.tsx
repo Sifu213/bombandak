@@ -170,7 +170,7 @@ export function GlobalStats() {
         },
         rewardPool: {
           balance: rewardPoolBalance.toString(),
-          formatted: parseFloat(formattedBalance).toFixed(4)
+          formatted: parseFloat(formattedBalance).toFixed(1)
         }
       })
 
@@ -247,7 +247,7 @@ export function GlobalStats() {
   const calculateRewardPerSurvivor = () => {
     if (stats.totalAlive === 0) return '0.00'
     const rewardPerSurvivor = parseFloat(stats.rewardPool.formatted) / stats.totalAlive
-    return rewardPerSurvivor.toFixed(4)
+    return rewardPerSurvivor.toFixed(1)
   }
 
 
