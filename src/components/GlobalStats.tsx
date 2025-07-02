@@ -101,7 +101,8 @@ export function GlobalStats() {
           const [mintTime] = nftDataStruct
           
           let realLifetime: number
-          if (isAlive && !isDead) {
+          const isNFTAlive = isAlive && !isDead && Number(timeLeft) > 0
+          if (isNFTAlive) {
             
             realLifetime = currentTime - Number(mintTime)
             aliveCount++
