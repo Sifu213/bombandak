@@ -12,7 +12,7 @@ export function NFTCard({ tokenId }: NFTCardProps) {
   const [imageUrl, setImageUrl] = useState<string | null>(null)
   const [isImageLoading, setIsImageLoading] = useState(true)
   const [useLocalFallback, setUseLocalFallback] = useState(false)
-  const [loadingTimeout, setLoadingTimeout] = useState<NodeJS.Timeout | null>(null)
+  const [loadingTimeout, setLoadingTimeout] = useState<number | null>(null)
 
   const { data: nftData } = useReadContract({
     address: CONTRACT_ADDRESS,
@@ -31,9 +31,9 @@ export function NFTCard({ tokenId }: NFTCardProps) {
   // Déterminer quelle image locale utiliser selon l'état du NFT
   const getLocalImagePath = () => {
     if (!nftData) return '/bombandak.png'
-    
+
     const [, , , isAlive, isDead, timeLeft] = nftData
-    
+
     if (isDead || !isAlive || Number(timeLeft) <= 0) {
       return '/bombandakexploded.png'
     } else {
@@ -44,38 +44,38 @@ export function NFTCard({ tokenId }: NFTCardProps) {
   useEffect(() => {
     const fetchImageFromIPFS = async () => {
       if (!tokenURI) return
-      
+
       setIsImageLoading(true)
       setUseLocalFallback(false)
-      
+
       // Timeout pour basculer sur les images locales après 10 secondes
       const timeout = setTimeout(() => {
         console.log('IPFS timeout, switching to local images')
         setUseLocalFallback(true)
         setIsImageLoading(false)
       }, 5000) // 10 secondes
-      
+
       setLoadingTimeout(timeout)
-      
+
       try {
-        const metadataUrl = tokenURI.startsWith('ipfs://') 
+        const metadataUrl = tokenURI.startsWith('ipfs://')
           ? tokenURI.replace('ipfs://', 'https://ipfs.io/ipfs/')
           : tokenURI
-        
+
         console.log('Fetching metadata from:', metadataUrl)
         const response = await fetch(metadataUrl)
-        
+
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`)
         }
-        
+
         const metadata = await response.json()
-        
+
         if (metadata.image) {
-          const imageUrl = metadata.image.startsWith('ipfs://') 
+          const imageUrl = metadata.image.startsWith('ipfs://')
             ? metadata.image.replace('ipfs://', 'https://ipfs.io/ipfs/')
             : metadata.image
-          
+
           console.log('IPFS image found:', imageUrl)
           setImageUrl(imageUrl)
           clearTimeout(timeout)
@@ -139,27 +139,26 @@ export function NFTCard({ tokenId }: NFTCardProps) {
     setIsImageLoading(false)
   }
 
-  
+
 
   return (
     <>
       <div className={`rounded-xl p-4 border-2 ${getStatusColor()}`}>
-        
+
         <div className="flex justify-between items-start mb-3">
           <h3 className="text-lg font-bold text-white">
             Bombandak #{tokenId.toString()}
           </h3>
-          <span className={`px-2 py-1 rounded text-xs font-semibold ${
-            isAlive && timeLeft > 0n ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
-          }`}>
+          <span className={`px-2 py-1 rounded text-xs font-semibold ${isAlive && timeLeft > 0n ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+            }`}>
             {isAlive && timeLeft > 0n ? 'TICKING' : 'EXPLODED'}
           </span>
         </div>
 
-       
+
         <div className="mb-3 relative">
-          
-          
+
+
           {/* Image IPFS (priorité) */}
           {!isImageLoading && !useLocalFallback && imageUrl && (
             <div className="relative">
@@ -169,10 +168,10 @@ export function NFTCard({ tokenId }: NFTCardProps) {
                 className="w-full h-auto object-cover rounded-lg"
                 onError={handleIPFSImageError}
               />
-              
+
             </div>
           )}
-          
+
           {/* Image locale (fallback) */}
           {!isImageLoading && useLocalFallback && (
             <div className="relative">
@@ -180,20 +179,19 @@ export function NFTCard({ tokenId }: NFTCardProps) {
                 src={getLocalImagePath()}
                 alt={`Bombandak #${tokenId} - ${isAlive && timeLeft > 0n ? 'Ticking' : 'Exploded'}`}
                 className="w-full h-auto object-cover rounded-lg"
-                
+
               />
-              
+
             </div>
           )}
-          
-       
+
+
         </div>
 
         <div className="mb-3">
           <div className="text-sm text-gray-400 mb-1">Time Left:</div>
-          <div className={`text-xl font-bold ${
-            Number(timeLeft) < 24 * 60 * 60 ? 'text-red-400' : 'text-green-400'
-          }`}>
+          <div className={`text-xl font-bold ${Number(timeLeft) < 24 * 60 * 60 ? 'text-red-400' : 'text-green-400'
+            }`}>
             {formatTimeLeft(timeLeft)}
           </div>
         </div>
