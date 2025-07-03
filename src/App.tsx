@@ -1,3 +1,4 @@
+import { NFTDataProvider } from './components/NFTDataContext'
 import { WalletConnect } from './components/WalletConnect'
 import { MintButton } from './components/MintButton'
 import { GlobalStats } from './components/GlobalStats'
@@ -5,10 +6,9 @@ import { ViewMyNFTs } from './components/ViewMyNFTs'
 import { Leaderboard } from './components/Leaderboard'
 import { OwnerPanel } from './components/OwnerPanel'
 
-function App() {
+function AppContent() {
   return (
     <div className="min-h-screen flex flex-col">
-
       <header className="w-full px-4 sm:px-6 lg:px-8 py-4">
         <div className="max-w-7xl mx-auto flex justify-between items-center">
           <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-white flex items-center gap-3">
@@ -25,9 +25,6 @@ function App() {
 
       <main className="flex-1 flex items-center justify-center px-4 sm:px-4 lg:px-4">
         <div className="max-w-7xl w-full mx-auto">
-
-
-
           <div className="mt-0 lg:mt-2 bg-white/10 backdrop-blur-sm rounded-xl p-6 mb-4 lg:p-3 border border-white/20">
             <h4 className="text-xl font-semibold text-white mb-4">How to Play</h4>
             <div className="text-center">
@@ -53,9 +50,7 @@ function App() {
             </div>
           </div>
 
-
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 lg:gap-8">
-
             <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 lg:p-8 border border-white/20">
               <GlobalStats />
             </div>
@@ -78,30 +73,33 @@ function App() {
             </div>
 
             <Leaderboard />
-
           </div>
-
         </div>
       </main>
 
       <footer className="w-full px-4 sm:px-6 lg:px-8 py-0">
         <div className="max-w-7xl mx-auto text-center">
-          
-            <nav className="text-gray-400 text-sm">
-              <ul className="flex items-center justify-center gap-4">
-                <li>
-                  Made by <a href="https://x.com/sifu_lam" target="_blank" rel="noopener noreferrer">Sifu_lam</a> for
-                </li>
-                <li>
-                  <img src="/logomonad.png" alt="monad" className="h-3 w-auto" />
-                </li>
-              </ul>
-            </nav>
-          
+          <nav className="text-gray-400 text-sm">
+            <ul className="flex items-center justify-center gap-4">
+              <li>
+                Made by <a href="https://x.com/sifu_lam" target="_blank" rel="noopener noreferrer">Sifu_lam</a> for
+              </li>
+              <li>
+                <img src="/logomonad.png" alt="monad" className="h-3 w-auto" />
+              </li>
+            </ul>
+          </nav>
         </div>
       </footer>
     </div>
   )
 }
 
+function App() {
+  return (
+    <NFTDataProvider>
+      <AppContent />
+    </NFTDataProvider>
+  )
+}
 export default App
