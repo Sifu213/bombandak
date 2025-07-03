@@ -1,74 +1,116 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { createPortal } from 'react-dom'
-import { useAccount, useReadContract } from 'wagmi'
+import { useAccount } from 'wagmi'
 import { readContract } from '@wagmi/core'
 import { config } from '../config/wagmi'
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../config/contract'
 import { NFTCard } from './NFTCard'
+import { useNFTData } from '../components/NFTDataContext'
 
 export function ViewMyNFTs() {
   const { address, isConnected } = useAccount()
   const [isOpen, setIsOpen] = useState(false)
   const [userNFTs, setUserNFTs] = useState<bigint[]>([])
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingOwnership, setIsLoadingOwnership] = useState(false)
+  const [lastOwnershipCheck, setLastOwnershipCheck] = useState<number | null>(null)
+  
+  // Utiliser le contexte NFT pour éviter les appels redondants
+  const { nftData, globalStats, isLoading: isLoadingNFTData } = useNFTData()
 
-  // Récupérer le nombre total de NFTs
-  const { data: totalSupply } = useReadContract({
-    address: CONTRACT_ADDRESS,
-    abi: CONTRACT_ABI,
-    functionName: 'getTotalSupply',
-  })
+  // Cache pour éviter les vérifications de propriété trop fréquentes
+  const OWNERSHIP_CACHE_DURATION = 30 * 1000 // 30 secondes
 
-  // Fonction pour vérifier quels NFTs appartiennent à l'utilisateur
+  // Récupérer le nombre total de NFTs depuis le contexte
+  const totalSupply = useMemo(() => {
+    return globalStats.totalMinted
+  }, [globalStats.totalMinted])
+
+  // Fonction optimisée pour vérifier quels NFTs appartiennent à l'utilisateur
   const checkUserNFTs = async () => {
-    if (!isConnected || !address || !totalSupply) {
+    if (!isConnected || !address || totalSupply === 0) {
       setUserNFTs([])
       return
     }
 
-    setIsLoading(true)
-    const nfts: bigint[] = []
-    const total = Number(totalSupply)
+    // Vérifier le cache
+    if (lastOwnershipCheck && Date.now() - lastOwnershipCheck < OWNERSHIP_CACHE_DURATION) {
+      return
+    }
+
+    setIsLoadingOwnership(true)
+    
 
     try {
-      // Vérifier chaque NFT de 1 à totalSupply
-      for (let i = 1; i <= total; i++) {
-        const tokenId = BigInt(i)
-        
+      // Utiliser les données du contexte pour savoir quels NFTs existent
+      const existingTokenIds = nftData.map(nft => nft.tokenId)
+      
+      // Vérifier seulement les NFTs qui existent réellement
+      const ownershipPromises = existingTokenIds.map(async (tokenId) => {
         try {
-          // Vérifier qui possède ce NFT
           const owner = await readContract(config, {
             address: CONTRACT_ADDRESS,
             abi: CONTRACT_ABI,
             functionName: 'ownerOf',
-            args: [tokenId],
+            args: [BigInt(tokenId)],
           }) as string
 
-          // Si l'utilisateur connecté possède ce NFT, l'ajouter à la liste
           if (owner.toLowerCase() === address.toLowerCase()) {
-            nfts.push(tokenId)
+            return BigInt(tokenId)
           }
+          return null
         } catch (error) {
-          // NFT n'existe pas ou a été brûlé, on continue
           console.log(`NFT ${tokenId} doesn't exist or is burned`)
+          return null
         }
-      }
+      })
 
-      setUserNFTs(nfts)
+      // Attendre tous les appels en parallèle
+      const results = await Promise.all(ownershipPromises)
+      const validNFTs = results.filter(tokenId => tokenId !== null) as bigint[]
+      
+      setUserNFTs(validNFTs)
+      setLastOwnershipCheck(Date.now())
     } catch (error) {
       console.error('Error checking user NFTs:', error)
       setUserNFTs([])
     } finally {
-      setIsLoading(false)
+      setIsLoadingOwnership(false)
     }
+  }
+
+  // Version alternative si on veut éviter complètement les appels ownerOf
+  const checkUserNFTsFromContext = () => {
+    if (!isConnected || !address || !nftData.length) {
+      setUserNFTs([])
+      return
+    }
+
+    // Filtrer les NFTs basés sur l'historique des propriétaires
+    const userOwnedNFTs = nftData
+      .filter(nft => {
+        // Vérifier si l'utilisateur actuel est le dernier propriétaire
+        const lastOwner = nft.ownerHistory[nft.ownerHistory.length - 1]
+        return lastOwner && lastOwner.toLowerCase() === address.toLowerCase()
+      })
+      .map(nft => BigInt(nft.tokenId))
+
+    setUserNFTs(userOwnedNFTs)
+    setLastOwnershipCheck(Date.now())
   }
 
   // Lancer la vérification quand la modal s'ouvre
   useEffect(() => {
-    if (isOpen) {
-      checkUserNFTs()
+    if (isOpen && nftData.length > 0) {
+      // Utiliser la version optimisée avec les données du contexte
+      if (nftData.some(nft => nft.ownerHistory.length > 0)) {
+        // Si on a l'historique des propriétaires, l'utiliser
+        checkUserNFTsFromContext()
+      } else {
+        // Sinon, faire les appels ownerOf mais de manière optimisée
+        checkUserNFTs()
+      }
     }
-  }, [isConnected, address, totalSupply, isOpen])
+  }, [isConnected, address, nftData, isOpen])
 
   const handleOpen = () => {
     if (!isConnected) {
@@ -82,9 +124,7 @@ export function ViewMyNFTs() {
     setIsOpen(false)
   }
 
-  const handleRefresh = () => {
-    checkUserNFTs()
-  }
+  
 
   // Empêcher le scroll du body quand la modal est ouverte
   useEffect(() => {
@@ -98,6 +138,20 @@ export function ViewMyNFTs() {
       document.body.style.overflow = 'unset'
     }
   }, [isOpen])
+
+  // Calculer l'état de chargement combiné
+  const isLoading = isLoadingNFTData || isLoadingOwnership
+
+  // Données enrichies des NFTs utilisateur
+  const enrichedUserNFTs = useMemo(() => {
+    return userNFTs.map(tokenId => {
+      const nftInfo = nftData.find(nft => nft.tokenId === Number(tokenId))
+      return {
+        tokenId,
+        ...nftInfo
+      }
+    })
+  }, [userNFTs, nftData])
 
   // Composant Modal séparé
   const Modal = () => (
@@ -118,6 +172,16 @@ export function ViewMyNFTs() {
               <p className="text-blue-100">
                 {isLoading ? 'Loading your NFTs...' : `Connected: ${address?.slice(0, 6)}...${address?.slice(-4)}`}
               </p>
+              {/* Informations supplémentaires */}
+              {!isLoading && isConnected && (
+                <div className="flex gap-4 mt-2 text-sm text-blue-200">
+                  <span>Owned: {userNFTs.length}</span>
+                  <span>Total Supply: {totalSupply}</span>
+                  {lastOwnershipCheck && (
+                    <span>Last check: {new Date(lastOwnershipCheck).toLocaleTimeString()}</span>
+                  )}
+                </div>
+              )}
             </div>
             <button 
               onClick={handleClose}
@@ -138,17 +202,49 @@ export function ViewMyNFTs() {
             </div>
           ) : isLoading ? (
             <div className="text-center py-16">
+              <div className="w-16 h-16 border-4 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
               <h3 className="text-2xl font-bold text-white mb-4">Loading Your NFTs...</h3>
+              <p className="text-gray-400">
+                {isLoadingNFTData ? 'Fetching NFT data...' : 'Checking ownership...'}
+              </p>
             </div>
           ) : userNFTs.length === 0 ? (
             <div className="text-center py-16">
               <h3 className="text-2xl font-bold text-white mb-4">No NFTs Found</h3>
               <p className="text-gray-400 text-lg mb-6">You don't own any Bombandak NFTs yet</p>
-              
+              {totalSupply > 0 && (
+                <div className="text-sm text-blue-400">
+                  Total supply: {totalSupply} NFTs minted
+                </div>
+              )}
             </div>
           ) : (
             <>
-              
+              {/* Stats rapides */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <div className="bg-white/5 rounded-lg p-3 text-center">
+                  <div className="text-lg font-bold text-yellow-400">{userNFTs.length}</div>
+                  <div className="text-xs text-white">Owned</div>
+                </div>
+                <div className="bg-white/5 rounded-lg p-3 text-center">
+                  <div className="text-lg font-bold text-green-400">
+                    {enrichedUserNFTs.filter(nft => nft.isAlive && nft.timeLeft && nft.timeLeft > 0).length}
+                  </div>
+                  <div className="text-xs text-white">Alive</div>
+                </div>
+                <div className="bg-white/5 rounded-lg p-3 text-center">
+                  <div className="text-lg font-bold text-red-400">
+                    {enrichedUserNFTs.filter(nft => nft.isDead || (nft.timeLeft && nft.timeLeft <= 0)).length}
+                  </div>
+                  <div className="text-xs text-white">Dead</div>
+                </div>
+                <div className="bg-white/5 rounded-lg p-3 text-center">
+                  <div className="text-lg font-bold text-blue-400">
+                    {enrichedUserNFTs.reduce((sum, nft) => sum + (nft.transferCount || 0), 0)}
+                  </div>
+                  <div className="text-xs text-white">Transfers</div>
+                </div>
+              </div>
 
               {/* NFTs Grid */}
               <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-4 gap-6">
@@ -166,17 +262,7 @@ export function ViewMyNFTs() {
         {isConnected && (
           <div className="border-t border-white/20 bg-gray-800/50 p-4">
             <div className="flex justify-center gap-4">
-              <button 
-                onClick={handleRefresh}
-                disabled={isLoading}
-                className={`px-6 py-2 border rounded-lg font-semibold transition-colors ${
-                  isLoading 
-                    ? 'bg-gray-500/20 border-gray-500 text-gray-500 cursor-not-allowed'
-                    : 'bg-blue-500/20 border-blue-500 text-blue-400 hover:bg-blue-500/30'
-                }`}
-              >
-                {isLoading ? 'Loading...' : 'Refresh'}
-              </button>
+              
               <button 
                 onClick={handleClose}
                 className="px-6 py-2 bg-purple-500/20 border border-purple-500 text-purple-400 rounded-lg hover:bg-purple-500/30 font-semibold transition-colors"
