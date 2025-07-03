@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react'
-import { useReadContract, useReadContracts } from 'wagmi'
+import { useReadContract } from 'wagmi'
+import { readContract } from '@wagmi/core'
+import { config } from '../config/wagmi'
 import { formatEther } from 'viem'
 import type { Address } from 'viem'
 import { CONTRACT_ADDRESS, CONTRACT_ABI } from '../config/contract'
@@ -41,14 +43,6 @@ interface NFTDataContextType {
   gameEnded: boolean
 }
 
-// Type pour les contrats
-type ContractCall = {
-  address: Address
-  abi: typeof CONTRACT_ABI
-  functionName: 'getNFTData' | 'nftData'
-  args: [bigint]
-}
-
 const defaultGlobalStats: GlobalStats = {
   totalMinted: 0,
   totalAlive: 0,
@@ -64,11 +58,15 @@ const defaultGlobalStats: GlobalStats = {
 const NFTDataContext = createContext<NFTDataContextType | undefined>(undefined)
 
 export const NFTDataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const [nftData, setNftData] = useState<NFTData[]>([])
   const [lastRefresh, setLastRefresh] = useState<number | null>(null)
   const [forceRefreshCounter, setForceRefreshCounter] = useState(0)
+  const [isLoadingNFTs, setIsLoadingNFTs] = useState(false)
 
-  // Cache pour éviter les appels trop fréquents
+  // Configuration de temporisation
   const CACHE_DURATION = 3 * 60 * 1000 // 3 minutes
+  const RPC_DELAY = 50 // 100ms entre chaque appel
+  const BATCH_SIZE = 10 // 5 NFTs par batch
 
   // Hooks pour les données de base du contrat
   const { 
@@ -138,110 +136,116 @@ export const NFTDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Valeur du gameEnded
   const gameEnded = Boolean(gameEndedData)
 
-  // Créer les contrats pour tous les NFTs basés sur le totalSupply
-  const nftContracts = useMemo((): ContractCall[] => {
-    if (!totalSupply || totalSupply === 0n) {
-      return []
+  // Fonction pour récupérer les données d'un NFT avec temporisation
+  const fetchSingleNFTData = useCallback(async (tokenId: number, delay: number = 0): Promise<NFTData | null> => {
+    // Attendre le délai spécifié
+    if (delay > 0) {
+      await new Promise(resolve => setTimeout(resolve, delay))
     }
 
-    const contracts: ContractCall[] = []
-    const totalSupplyNumber = Number(totalSupply)
-
-    // Récupérer les données détaillées ET les données de base pour chaque NFT
-    for (let i = 1; i <= totalSupplyNumber; i++) {
-      contracts.push({
+    try {
+      // Récupérer les données détaillées
+      const detailedData = await readContract(config, {
         address: CONTRACT_ADDRESS as Address,
         abi: CONTRACT_ABI,
         functionName: 'getNFTData',
-        args: [BigInt(i)],
-      })
-      // Ajouter l'appel pour récupérer les données de base (mintTime, etc.)
-      contracts.push({
+        args: [BigInt(tokenId)],
+      }) as [bigint, bigint, string[], boolean, boolean, bigint]
+
+      // Récupérer les données de base
+      const basicData = await readContract(config, {
         address: CONTRACT_ADDRESS as Address,
         abi: CONTRACT_ABI,
         functionName: 'nftData',
-        args: [BigInt(i)],
-      })
+        args: [BigInt(tokenId)],
+      }) as [bigint, bigint, bigint, boolean, boolean]
+
+      const [expiryTime, transferCount, ownerHistory, isAlive, isDead, timeLeft] = detailedData
+      const [mintTime] = basicData
+
+      const now = Math.floor(Date.now() / 1000)
+      
+      // Calculer le temps de vie réel avec mintTime
+      let realLifetime = 0
+      
+      if (isDead) {
+        realLifetime = Number(expiryTime) - Number(mintTime)
+      } else if (isAlive) {
+        realLifetime = now - Number(mintTime)
+      } else {
+        realLifetime = Number(expiryTime) - Number(mintTime)
+      }
+
+      return {
+        tokenId,
+        transferCount: Number(transferCount),
+        realLifetime: Math.max(0, realLifetime),
+        timeLeft: Number(timeLeft),
+        isAlive,
+        isDead,
+        ownerHistory: ownerHistory || []
+      }
+    } catch (error) {
+      console.error(`Erreur lors de la récupération des données NFT ${tokenId}:`, error)
+      return null
+    }
+  }, [])
+
+  // Fonction pour récupérer toutes les données NFT avec temporisation
+  const fetchAllNFTData = useCallback(async () => {
+    if (!totalSupply || totalSupply === 0n) {
+      setNftData([])
+      return
     }
 
-    return contracts
-  }, [totalSupply, forceRefreshCounter])
-
-  // Utiliser useReadContracts pour récupérer toutes les données en une seule fois
-  const { 
-    data: nftContractData, 
-    isLoading: isLoadingNFTs,
-    refetch: refetchNFTs
-  } = useReadContracts({
-    contracts: nftContracts,
-    query: {
-      enabled: nftContracts.length > 0,
-      staleTime: CACHE_DURATION,
-      gcTime: CACHE_DURATION,
-    }
-  })
-
-  // Traiter les données des NFTs
-  const nftData = useMemo((): NFTData[] => {
-    if (!nftContractData || !totalSupply) {
-      return []
+    // Vérifier le cache
+    if (lastRefresh && Date.now() - lastRefresh < CACHE_DURATION) {
+      return
     }
 
-    const processedData: NFTData[] = []
-    const now = Math.floor(Date.now() / 1000)
+    setIsLoadingNFTs(true)
+    const allNFTData: NFTData[] = []
     const totalSupplyNumber = Number(totalSupply)
 
-    for (let i = 0; i < totalSupplyNumber; i++) {
-      const detailedDataIndex = i * 2 // getNFTData
-      const basicDataIndex = i * 2 + 1 // nftData
+    try {
+      // Diviser en batches pour éviter de surcharger le RPC
+      for (let i = 1; i <= totalSupplyNumber; i += BATCH_SIZE) {
+        const endIndex = Math.min(i + BATCH_SIZE - 1, totalSupplyNumber)
+        const batchPromises = []
 
-      const detailedResult = nftContractData[detailedDataIndex]
-      const basicResult = nftContractData[basicDataIndex]
-
-      if (detailedResult?.status === 'success' && detailedResult.result &&
-          basicResult?.status === 'success' && basicResult.result) {
-        try {
-          // Données détaillées: [expiryTime, transferCount, ownerHistory, isAlive, isDead, timeLeft]
-          const detailedData = detailedResult.result as [bigint, bigint, string[], boolean, boolean, bigint]
-          const [expiryTime, transferCount, ownerHistory, isAlive, isDead, timeLeft] = detailedData
-
-          // Données de base: [mintTime, expiryTime, transferCount, isAlive, isDead]
-          const basicData = basicResult.result as [bigint, bigint, bigint, boolean, boolean]
-          const [mintTime] = basicData
-
-          const tokenId = i + 1
-          
-          // Calculer le temps de vie réel avec mintTime
-          let realLifetime = 0
-          
-          if (isDead) {
-            // Si mort, calculer le temps total vécu depuis le mint
-            realLifetime = Number(expiryTime) - Number(mintTime)
-          } else if (isAlive) {
-            // Si vivant, calculer le temps vécu depuis le mint
-            realLifetime = now - Number(mintTime)
-          } else {
-            // NFT expiré mais pas encore marqué comme mort
-            realLifetime = Number(expiryTime) - Number(mintTime)
-          }
-
-          processedData.push({
-            tokenId,
-            transferCount: Number(transferCount),
-            realLifetime: Math.max(0, realLifetime),
-            timeLeft: Number(timeLeft),
-            isAlive,
-            isDead,
-            ownerHistory: ownerHistory || []
-          })
-        } catch (error) {
-          console.error(`Erreur lors du traitement des données NFT ${i + 1}:`, error)
+        // Créer les promesses pour ce batch avec temporisation progressive
+        for (let j = i; j <= endIndex; j++) {
+          const delay = (j - i) * RPC_DELAY
+          batchPromises.push(fetchSingleNFTData(j, delay))
         }
-      }
-    }
 
-    return processedData
-  }, [nftContractData, totalSupply])
+        // Attendre que le batch soit terminé
+        const batchResults = await Promise.all(batchPromises)
+        
+        // Ajouter les résultats valides
+        batchResults.forEach(result => {
+          if (result) {
+            allNFTData.push(result)
+          }
+        })
+
+        // Temporisation entre les batches
+        if (i + BATCH_SIZE <= totalSupplyNumber) {
+          await new Promise(resolve => setTimeout(resolve, RPC_DELAY * 2))
+        }
+
+        // Log de progression
+        console.log(`Récupération NFT progress: ${Math.min(endIndex, totalSupplyNumber)}/${totalSupplyNumber}`)
+      }
+
+      setNftData(allNFTData)
+      setLastRefresh(Date.now())
+    } catch (error) {
+      console.error('Erreur lors de la récupération des données NFT:', error)
+    } finally {
+      setIsLoadingNFTs(false)
+    }
+  }, [totalSupply, fetchSingleNFTData, lastRefresh, forceRefreshCounter])
 
   // Calcul des stats globales à partir des données NFT
   const globalStats = useMemo((): GlobalStats => {
@@ -279,24 +283,26 @@ export const NFTDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Fonction pour forcer le refresh
   const forceRefresh = useCallback(async () => {
     setForceRefreshCounter(prev => prev + 1)
-    setLastRefresh(Date.now())
+    setLastRefresh(null) // Reset le cache
     
-    // Refetch toutes les données du contrat
+    // Refetch les données de base d'abord
     await Promise.all([
       refetchTotalSupply(),
       refetchRewardPool(),
       refetchGameEnded(),
       refetchMintDeadline(),
-      refetchNFTs(),
     ])
-  }, [refetchTotalSupply, refetchRewardPool, refetchGameEnded, refetchMintDeadline, refetchNFTs])
+    
+    // Puis les données NFT avec temporisation
+    await fetchAllNFTData()
+  }, [refetchTotalSupply, refetchRewardPool, refetchGameEnded, refetchMintDeadline, fetchAllNFTData])
 
-  // Effet pour mettre à jour le timestamp du dernier refresh
+  // Effet pour récupérer les données NFT quand le totalSupply change
   useEffect(() => {
-    if (nftData.length > 0 && !lastRefresh) {
-      setLastRefresh(Date.now())
+    if (totalSupply && totalSupply > 0n) {
+      fetchAllNFTData()
     }
-  }, [nftData, lastRefresh])
+  }, [totalSupply, fetchAllNFTData])
 
   // Calculer l'état de chargement global
   const isLoadingGlobal = isLoadingTotalSupply || isLoadingRewardPool || isLoadingNFTs
