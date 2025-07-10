@@ -5,7 +5,7 @@ type LeaderboardType = 'transfers' | 'longevity' | 'deaths'
 
 export function Leaderboard() {
   const [activeTab, setActiveTab] = useState<LeaderboardType>('transfers')
-  const { getLeaderboardData, isLoading} = useNFTData()
+  const { getLeaderboardData, isLoading } = useNFTData()
 
   const getFilteredData = () => {
     const leaderboardData = getLeaderboardData()
@@ -39,11 +39,15 @@ export function Leaderboard() {
     const days = Math.floor(seconds / (24 * 60 * 60))
     const hours = Math.floor((seconds % (24 * 60 * 60)) / (60 * 60))
     const minutes = Math.floor((seconds % (60 * 60)) / 60)
+    const secs = seconds % 60
 
-    if (days > 0) return `${days}d ${hours}h`
-    if (hours > 0) return `${hours}h ${minutes}m`
-    return `${minutes}m`
+    if (days > 0) return `${days}d ${hours}h ${minutes}m`
+    if (hours > 0) return `${hours}h ${minutes}m ${secs}s`
+    if (minutes > 0) return `${minutes}m ${secs}s`
+    return `${secs}s`
   }
+
+  
 
   const shortenAddress = (address: string) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`
@@ -169,8 +173,9 @@ export function Leaderboard() {
                         {formatTime(nft.realLifetime)}
                       </div>
                       <div className="text-xs text-gray-400">
-                        {nft.isAlive && nft.timeLeft > 0 ? 'ticked so far' : 'total ticked'}
+                        {(nft.isAlive && nft.timeLeft > 0) ? 'ticked so far' : 'total ticked'}
                       </div>
+                      
                     </>
                   )}
 
@@ -185,18 +190,17 @@ export function Leaderboard() {
                 </div>
 
                 <div className={`px-2 py-1 rounded text-xs font-semibold ml-4 ${
-                  nft.isAlive && nft.timeLeft > 0
+                  (nft.isAlive && nft.timeLeft > 0)
                     ? 'bg-green-500/20 text-green-400'
                     : 'bg-red-500/20 text-red-400'
                 }`}>
-                  {nft.isAlive && nft.timeLeft > 0 ? 'Ticking' : 'Exploded'}
+                  {(nft.isAlive && nft.timeLeft > 0) ? 'Ticking' : 'Exploded'}
                 </div>
               </div>
             ))
           )}
         </div>
       )}
-      
 
      
     </div>

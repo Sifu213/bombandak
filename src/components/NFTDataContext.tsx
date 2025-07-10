@@ -65,8 +65,8 @@ export const NFTDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Configuration de temporisation
   const CACHE_DURATION = 3 * 60 * 1000 // 3 minutes
-  const RPC_DELAY = 50 // 100ms entre chaque appel
-  const BATCH_SIZE = 10 // 5 NFTs par batch
+  const RPC_DELAY = 100 // 100ms entre chaque appel
+  const BATCH_SIZE = 5 // 5 NFTs par batch
 
   // Hooks pour les données de base du contrat
   const { 
@@ -165,24 +165,34 @@ export const NFTDataProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
       const now = Math.floor(Date.now() / 1000)
       
-      // Calculer le temps de vie réel avec mintTime
+      // Calculer le temps de vie réel selon vos spécifications
       let realLifetime = 0
       
-      if (isDead) {
+      // Logique corrigée pour déterminer si le NFT est vraiment vivant
+      const isReallyAlive = isAlive && timeLeft > 0
+      const isReallyDead = isDead || timeLeft <= 0 || !isAlive
+      
+      if (isReallyDead) {
+        // Si le NFT est mort : délai entre date/heure du mint et date/heure où il a explosé
+        // Si timeLeft = 0, alors il a explosé à expiryTime
         realLifetime = Number(expiryTime) - Number(mintTime)
-      } else if (isAlive) {
+      } else if (isReallyAlive) {
+        // Si le NFT est encore en vie : délai entre date/heure du mint et date/heure actuelle
         realLifetime = now - Number(mintTime)
       } else {
+        // Cas de fallback
         realLifetime = Number(expiryTime) - Number(mintTime)
       }
+
+     
 
       return {
         tokenId,
         transferCount: Number(transferCount),
         realLifetime: Math.max(0, realLifetime),
         timeLeft: Number(timeLeft),
-        isAlive,
-        isDead,
+        isAlive: isReallyAlive, // Utiliser la logique corrigée
+        isDead: isReallyDead,   // Utiliser la logique corrigée
         ownerHistory: ownerHistory || []
       }
     } catch (error) {
